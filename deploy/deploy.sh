@@ -34,34 +34,34 @@ set -e
 cd /root/octree-compile
 
 echo "🛑 Stopping existing containers..."
-docker compose -f deployments/docker-compose.yml down || true
+docker-compose -f deployments/docker-compose.yml down || true
 
 echo "🏗️  Building Docker image..."
-docker compose -f deployments/docker-compose.yml build --no-cache
+docker-compose -f deployments/docker-compose.yml build --no-cache
 
 echo "🚀 Starting services..."
-docker compose -f deployments/docker-compose.yml up -d
+docker-compose -f deployments/docker-compose.yml up -d
 
 echo "⏳ Waiting for service to be ready..."
 sleep 5
 
 echo "✅ Checking service status..."
-docker compose -f deployments/docker-compose.yml ps
+docker-compose -f deployments/docker-compose.yml ps
 
 echo "📊 Container logs:"
-docker compose -f deployments/docker-compose.yml logs --tail=20
+docker-compose -f deployments/docker-compose.yml logs --tail=20
 
 echo "🧪 Testing health endpoint..."
-curl -s http://localhost:8080/health || echo "Health check failed"
+curl -s http://localhost:3001/health || echo "Health check failed"
 
 ENDSSH
 
 # Step 3: Test the deployment
 echo -e "${YELLOW}🧪 Testing deployment...${NC}"
 sleep 2
-if ssh $SERVER_USER@$SERVER_IP "curl -s http://localhost:8080/health" | grep -q "ok"; then
+if ssh $SERVER_USER@$SERVER_IP "curl -s http://localhost:3001/health" | grep -q "ok"; then
     echo -e "${GREEN}✅ Deployment successful!${NC}"
-    echo -e "${GREEN}Service is running at: http://$SERVER_IP:8080${NC}"
+    echo -e "${GREEN}Service is running at: http://$SERVER_IP:3001${NC}"
 else
     echo -e "${RED}❌ Deployment may have issues. Check logs.${NC}"
     exit 1
@@ -73,13 +73,13 @@ echo -e "${GREEN}Deployment Complete!${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
 echo ""
 echo "📝 Useful commands:"
-echo "  View logs:    ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f deployments/docker-compose.yml logs -f'"
-echo "  Restart:      ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f deployments/docker-compose.yml restart'"
-echo "  Stop:         ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f deployments/docker-compose.yml down'"
-echo "  Shell access: ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f deployments/docker-compose.yml exec latex-compile /bin/sh'"
+echo "  View logs:    ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.yml logs -f'"
+echo "  Restart:      ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.yml restart'"
+echo "  Stop:         ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.yml down'"
+echo "  Shell access: ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.yml exec latex-compile /bin/sh'"
 echo ""
 echo "🌐 API Endpoints:"
-echo "  Health: http://$SERVER_IP:8080/health"
-echo "  Compile: http://$SERVER_IP:8080/compile"
+echo "  Health: http://$SERVER_IP:3001/health"
+echo "  Compile: http://$SERVER_IP:3001/compile"
 echo ""
 

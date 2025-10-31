@@ -41,6 +41,10 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/latex-compile .
 
+# Copy cleanup script
+COPY scripts/cleanup-logs.sh /app/scripts/cleanup-logs.sh
+RUN chmod +x /app/scripts/cleanup-logs.sh
+
 # Create logs directory
 RUN mkdir -p /app/logs
 

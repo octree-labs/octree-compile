@@ -2,15 +2,23 @@ package internal
 
 import "time"
 
+// FileEntry represents a single file in a multi-file project
+type FileEntry struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 // CompileRequest represents the incoming compilation request
 type CompileRequest struct {
-	Content string `json:"content"`
+	Content string      `json:"content,omitempty"` // Single file (backward compat)
+	Files   []FileEntry `json:"files,omitempty"`   // Multi-file
 }
 
 // CompileJob represents a queued compilation job
 type CompileJob struct {
-	Context    interface{} // Will be *gin.Context
-	Content    string
+	Context    interface{}   // Will be *gin.Context
+	Content    string        // Single file content (backward compat)
+	Files      []FileEntry   // Multi-file content
 	EnqueuedAt time.Time
 	ResultChan chan *CompileResult // Channel to send result back to handler
 }

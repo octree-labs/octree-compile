@@ -44,12 +44,22 @@ func CompileHandler(c *gin.Context) {
 		req.Content = string(body)
 	}
 
-	if req.Content == "" {
+	// Validate: must have either content or files
+	if req.Content == "" && len(req.Files) == 0 {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:   "Invalid request",
-			Message: "LaTeX content is required",
+			Message: "LaTeX content or files array is required",
 		})
 		return
+	}
+	
+	// Convert single content to multi-file format internally
+	var files []FileEntry
+	if len(req.Files) > 0 {
+		files = req.Files
+	} else if req.Content != "" {
+		// Backward compatibility: single content becomes main.tex
+		files = []FileEntry{{Path: "main.tex", Content: req.Content}}
 	}
 
 	// Check queue capacity
@@ -65,7 +75,8 @@ func CompileHandler(c *gin.Context) {
 	// Create job with result channel
 	job := &CompileJob{
 		Context:    c,
-		Content:    req.Content,
+		Content:    req.Content, // Keep for backward compat logging
+		Files:      files,
 		EnqueuedAt: time.Now(),
 		ResultChan: make(chan *CompileResult, 1),
 	}
@@ -122,7 +133,7 @@ func HandleCompilation(job *CompileJob) {
 	}()
 
 	comp := New()
-	result := comp.Compile(job.Content, job.EnqueuedAt)
+	result := comp.Compile(job.Content, job.Files, job.EnqueuedAt)
 	
 	// Send result back to handler through channel
 	job.ResultChan <- result
