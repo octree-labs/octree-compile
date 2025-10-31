@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,6 +87,7 @@ func needsMultiplePasses(content string) bool {
 }
 
 // createFileStructure writes all files to the temp directory, preserving directory structure
+// Handles both text files and binary files (encoded as base64)
 func createFileStructure(tempDir string, files []FileEntry) error {
 	for _, file := range files {
 		fullPath := filepath.Join(tempDir, file.Path)
@@ -92,12 +95,23 @@ func createFileStructure(tempDir string, files []FileEntry) error {
 		// Create directory if needed
 		dir := filepath.Dir(fullPath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return err
+			return fmt.Errorf("failed to create directory %s: %v", dir, err)
 		}
 		
-		// Write file
-		if err := os.WriteFile(fullPath, []byte(file.Content), 0644); err != nil {
-			return err
+		// Handle binary files encoded as base64
+		if file.Encoding == "base64" {
+			decoded, err := base64.StdEncoding.DecodeString(file.Content)
+			if err != nil {
+				return fmt.Errorf("failed to decode base64 file %s: %v", file.Path, err)
+			}
+			if err := os.WriteFile(fullPath, decoded, 0644); err != nil {
+				return fmt.Errorf("failed to write binary file %s: %v", file.Path, err)
+			}
+		} else {
+			// Text file
+			if err := os.WriteFile(fullPath, []byte(file.Content), 0644); err != nil {
+				return fmt.Errorf("failed to write text file %s: %v", file.Path, err)
+			}
 		}
 	}
 	

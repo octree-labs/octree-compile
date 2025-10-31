@@ -4,8 +4,9 @@ import "time"
 
 // FileEntry represents a single file in a multi-file project
 type FileEntry struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
+	Path     string `json:"path"`
+	Content  string `json:"content"`           // Text content (for .tex, .sty, etc.)
+	Encoding string `json:"encoding,omitempty"` // "base64" for binary files, empty for text
 }
 
 // CompileRequest represents the incoming compilation request

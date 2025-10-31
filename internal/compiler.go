@@ -49,10 +49,20 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 	var mainContent string
 	
 	if isMultiFile {
-		log.Printf("[%s] Multi-file project: %d files", c.RequestID, len(files))
+		// Count text vs binary files
+		textFiles, binaryFiles := 0, 0
+		for _, f := range files {
+			if f.Encoding == "base64" {
+				binaryFiles++
+			} else {
+				textFiles++
+			}
+		}
+		log.Printf("[%s] Multi-file project: %d files (%d text, %d binary)", c.RequestID, len(files), textFiles, binaryFiles)
+		
 		// Find main.tex content for preview and detection
 		for _, f := range files {
-			if f.Path == "main.tex" {
+			if f.Path == "main.tex" && f.Encoding != "base64" {
 				mainContent = f.Content
 				break
 			}
@@ -60,7 +70,7 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 		if mainContent == "" {
 			log.Printf("[%s] Warning: No main.tex found in files, using first .tex file", c.RequestID)
 			for _, f := range files {
-				if strings.HasSuffix(f.Path, ".tex") {
+				if strings.HasSuffix(f.Path, ".tex") && f.Encoding != "base64" {
 					mainContent = f.Content
 					break
 				}
