@@ -38,11 +38,14 @@ func New() *Compiler {
 	}
 }
 
-func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Time) *CompileResult {
+func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Time, projectID string) *CompileResult {
 	receivedAt := time.Now()
 	queueMs := receivedAt.Sub(enqueuedAt).Milliseconds()
 
 	log.Printf("[%s] ==== COMPILE REQUEST RECEIVED ====", c.RequestID)
+	if projectID != "" {
+		log.Printf("[%s] ProjectID: %s", c.RequestID, projectID)
+	}
 	
 	// Determine if single or multi-file
 	isMultiFile := len(files) > 0
@@ -96,12 +99,76 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 		Status:     "processing",
 	}
 
-	// Create temporary directory
-	tempDir, err := os.MkdirTemp("", "latex-*")
-	if err != nil {
-		return c.errorResult(metadata, fmt.Sprintf("Failed to create temp directory: %v", err), queueMs, receivedAt)
+	// ==== CACHING LOGIC ====
+	cache := GetCache()
+	var tempDir string
+	var fileChanges *FileChanges
+	var isIncremental bool
+	var shouldCleanup bool = true
+
+	if projectID != "" && isMultiFile {
+		// Acquire project lock to serialize compilations
+		cache.LockProject(projectID)
+		defer cache.UnlockProject(projectID)
+
+		// Check content hash for instant cache hit
+		contentHash := HashFileSet(files)
+		if cache.CheckContentHash(projectID, contentHash) {
+			entry, _ := cache.Get(projectID)
+			if entry != nil && len(entry.LastPDFData) > 0 {
+				log.Printf("[%s] CACHE HIT: Content unchanged, returning cached PDF", c.RequestID)
+				completedAt := time.Now()
+				durationMs := completedAt.Sub(receivedAt).Milliseconds()
+
+				return &CompileResult{
+					RequestID:  c.RequestID,
+					Success:    true,
+					PDFData:    entry.LastPDFData,
+					SHA256:     entry.LastSHA256,
+					QueueMs:    queueMs,
+					DurationMs: durationMs,
+					PDFSize:    len(entry.LastPDFData),
+					CacheHit:   true,
+				}
+			}
+		}
+
+		// Check if we have a cached temp directory
+		entry, exists := cache.Get(projectID)
+		if exists && entry.TempDir != "" {
+			// Verify temp dir still exists
+			if _, err := os.Stat(entry.TempDir); err == nil {
+				log.Printf("[%s] Using cached temp directory: %s", c.RequestID, entry.TempDir)
+				tempDir = entry.TempDir
+				isIncremental = true
+				shouldCleanup = false // Don't clean up cached dir
+
+				// Diff files to find changes
+				fileChanges = diffFiles(files, entry.FileHashes)
+				changeCount := len(fileChanges.Added) + len(fileChanges.Modified) + len(fileChanges.Deleted)
+				log.Printf("[%s] File changes: %d added, %d modified, %d deleted (total: %d)",
+					c.RequestID, len(fileChanges.Added), len(fileChanges.Modified), len(fileChanges.Deleted), changeCount)
+				log.Printf("[%s] Change types: tex=%v bib=%v assets=%v",
+					c.RequestID, fileChanges.HasTexChanges, fileChanges.HasBibChanges, fileChanges.HasAssetChanges)
+			} else {
+				log.Printf("[%s] Cached temp dir no longer exists, creating new one", c.RequestID)
+			}
+		}
 	}
-	defer os.RemoveAll(tempDir)
+
+	// Create temporary directory if not using cache
+	if tempDir == "" {
+		var err error
+		tempDir, err = os.MkdirTemp("", "latex-*")
+		if err != nil {
+			return c.errorResult(metadata, fmt.Sprintf("Failed to create temp directory: %v", err), queueMs, receivedAt)
+		}
+		log.Printf("[%s] Created new temp directory: %s", c.RequestID, tempDir)
+	}
+
+	if shouldCleanup {
+		defer os.RemoveAll(tempDir)
+	}
 
 	texFilePath := filepath.Join(tempDir, "main.tex")
 	pdfPath := filepath.Join(tempDir, "main.pdf")
@@ -109,11 +176,20 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 
 	// Write files
 	if isMultiFile {
-		// Write all files preserving directory structure
-		if err := createFileStructure(tempDir, files); err != nil {
-			return c.errorResult(metadata, fmt.Sprintf("Failed to write files: %v", err), queueMs, receivedAt)
+		if isIncremental && fileChanges != nil {
+			// Incremental: only write changed files
+			if err := updateCachedFiles(tempDir, fileChanges); err != nil {
+				return c.errorResult(metadata, fmt.Sprintf("Failed to update files: %v", err), queueMs, receivedAt)
+			}
+			log.Printf("[%s] Incremental update: wrote %d changed files", c.RequestID,
+				len(fileChanges.Added)+len(fileChanges.Modified)+len(fileChanges.Deleted))
+		} else {
+			// Full write: all files
+			if err := createFileStructure(tempDir, files); err != nil {
+				return c.errorResult(metadata, fmt.Sprintf("Failed to write files: %v", err), queueMs, receivedAt)
+			}
+			log.Printf("[%s] Multi-file structure created in: %s", c.RequestID, tempDir)
 		}
-		log.Printf("[%s] Multi-file structure created in: %s", c.RequestID, tempDir)
 	} else {
 		// Single file - backward compatible
 		if err := os.WriteFile(texFilePath, []byte(content), 0644); err != nil {
@@ -129,7 +205,23 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 	needsBib := needsBibliography(mainContent, files)
 	needsMultiPass := needsMultiplePasses(mainContent)
 	
-	log.Printf("[%s] Compilation strategy - Bibliography: %v, Multi-pass: %v", c.RequestID, needsBib, needsMultiPass)
+	// Override strategy for incremental compilation
+	if isIncremental && fileChanges != nil {
+		// Adjust strategy based on what changed
+		if !fileChanges.HasTexChanges && fileChanges.HasBibChanges {
+			// Only bibliography files changed - skip first pdflatex
+			log.Printf("[%s] INCREMENTAL: Only .bib files changed, optimized strategy", c.RequestID)
+			needsBib = true
+		} else if !fileChanges.HasTexChanges && !fileChanges.HasBibChanges && fileChanges.HasAssetChanges {
+			// Only assets changed - single pass is enough
+			log.Printf("[%s] INCREMENTAL: Only assets changed, single pass", c.RequestID)
+			needsBib = false
+			needsMultiPass = false
+		}
+	}
+	
+	log.Printf("[%s] Compilation strategy - Bibliography: %v, Multi-pass: %v, Incremental: %v", 
+		c.RequestID, needsBib, needsMultiPass, isIncremental)
 	
 	// Run compilation passes
 	var stdout, stderr bytes.Buffer
@@ -198,8 +290,7 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 	} else {
 		// Single pass - fast path
 		log.Printf("[%s] Running single-pass compilation", c.RequestID)
-		err = c.runPdflatex(tempDir, texFilePath, &stdout, &stderr)
-		if err != nil {
+		if err := c.runPdflatex(tempDir, texFilePath, &stdout, &stderr); err != nil {
 			if exitError, ok := err.(*exec.ExitError); ok {
 				exitCode = exitError.ExitCode()
 			} else {
@@ -246,6 +337,25 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 		metadata.LogTail = tailLines(truncateText(logContent, MaxLogChars), LogTailLines)
 		c.persistMetadata(metadata)
 
+		// Cache the result for future compilations
+		if projectID != "" && isMultiFile {
+			contentHash := HashFileSet(files)
+			fileHashes := buildFileHashMap(files)
+			
+			cacheEntry := &CacheEntry{
+				ProjectID:      projectID,
+				TempDir:        tempDir,
+				FileHashes:     fileHashes,
+				ContentHash:    contentHash,
+				LastPDFData:    pdfData,
+				LastSHA256:     sha256Hex,
+				LastAccessTime: time.Now(),
+			}
+			
+			cache.Set(projectID, cacheEntry)
+			log.Printf("[%s] Cached compilation result for project %s", c.RequestID, projectID)
+		}
+
 		log.Printf("[%s] Compilation successful", c.RequestID)
 
 		return &CompileResult{
@@ -256,6 +366,7 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 			QueueMs:    queueMs,
 			DurationMs: durationMs,
 			PDFSize:    len(pdfData),
+			CacheHit:   false,
 		}
 	}
 

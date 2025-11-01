@@ -62,6 +62,11 @@ func CompileHandler(c *gin.Context) {
 		files = []FileEntry{{Path: "main.tex", Content: req.Content}}
 	}
 
+	// Log project ID if provided
+	if req.ProjectID != "" {
+		fmt.Printf("Compilation request for project: %s\n", req.ProjectID)
+	}
+
 	// Check queue capacity
 	if len(requestQueue) >= cap(requestQueue) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
@@ -74,11 +79,13 @@ func CompileHandler(c *gin.Context) {
 
 	// Create job with result channel
 	job := &CompileJob{
-		Context:    c,
-		Content:    req.Content, // Keep for backward compat logging
-		Files:      files,
-		EnqueuedAt: time.Now(),
-		ResultChan: make(chan *CompileResult, 1),
+		Context:          c,
+		Content:          req.Content, // Keep for backward compat logging
+		Files:            files,
+		ProjectID:        req.ProjectID,
+		LastModifiedFile: req.LastModifiedFile,
+		EnqueuedAt:       time.Now(),
+		ResultChan:       make(chan *CompileResult, 1),
 	}
 
 	// Add to queue (non-blocking with timeout)
@@ -133,7 +140,7 @@ func HandleCompilation(job *CompileJob) {
 	}()
 
 	comp := New()
-	result := comp.Compile(job.Content, job.Files, job.EnqueuedAt)
+	result := comp.Compile(job.Content, job.Files, job.EnqueuedAt, job.ProjectID)
 	
 	// Send result back to handler through channel
 	job.ResultChan <- result

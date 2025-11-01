@@ -118,3 +118,130 @@ func createFileStructure(tempDir string, files []FileEntry) error {
 	return nil
 }
 
+// FileChanges represents changes between file sets
+type FileChanges struct {
+	Added    []FileEntry
+	Modified []FileEntry
+	Deleted  []string // Just the paths
+	HasTexChanges   bool
+	HasBibChanges   bool
+	HasAssetChanges bool
+}
+
+// diffFiles compares current files with cached file hashes and returns changes
+func diffFiles(currentFiles []FileEntry, cachedHashes map[string]string) *FileChanges {
+	changes := &FileChanges{
+		Added:    []FileEntry{},
+		Modified: []FileEntry{},
+		Deleted:  []string{},
+	}
+
+	// Track which cached files we've seen
+	seen := make(map[string]bool)
+
+	// Check for added and modified files
+	for _, file := range currentFiles {
+		seen[file.Path] = true
+		currentHash := HashFileContent(file.Content)
+		
+		if cachedHash, exists := cachedHashes[file.Path]; exists {
+			// File exists in cache
+			if currentHash != cachedHash {
+				changes.Modified = append(changes.Modified, file)
+				categorizeFileChange(file.Path, changes)
+			}
+		} else {
+			// New file
+			changes.Added = append(changes.Added, file)
+			categorizeFileChange(file.Path, changes)
+		}
+	}
+
+	// Check for deleted files
+	for path := range cachedHashes {
+		if !seen[path] {
+			changes.Deleted = append(changes.Deleted, path)
+			categorizeFileChange(path, changes)
+		}
+	}
+
+	return changes
+}
+
+// categorizeFileChange updates the change flags based on file extension
+func categorizeFileChange(path string, changes *FileChanges) {
+	if strings.HasSuffix(path, ".tex") || strings.HasSuffix(path, ".sty") || strings.HasSuffix(path, ".cls") {
+		changes.HasTexChanges = true
+	} else if strings.HasSuffix(path, ".bib") {
+		changes.HasBibChanges = true
+	} else {
+		// Images, data files, etc.
+		changes.HasAssetChanges = true
+	}
+}
+
+// buildFileHashMap creates a map of file path to content hash
+func buildFileHashMap(files []FileEntry) map[string]string {
+	hashes := make(map[string]string)
+	for _, file := range files {
+		hashes[file.Path] = HashFileContent(file.Content)
+	}
+	return hashes
+}
+
+// updateCachedFiles writes only changed files to the temp directory
+func updateCachedFiles(tempDir string, changes *FileChanges) error {
+	// Write added files
+	for _, file := range changes.Added {
+		if err := writeFile(tempDir, file); err != nil {
+			return err
+		}
+	}
+
+	// Write modified files
+	for _, file := range changes.Modified {
+		if err := writeFile(tempDir, file); err != nil {
+			return err
+		}
+	}
+
+	// Delete removed files
+	for _, path := range changes.Deleted {
+		fullPath := filepath.Join(tempDir, path)
+		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to delete file %s: %v", path, err)
+		}
+	}
+
+	return nil
+}
+
+// writeFile writes a single file to the temp directory
+func writeFile(tempDir string, file FileEntry) error {
+	fullPath := filepath.Join(tempDir, file.Path)
+	
+	// Create directory if needed
+	dir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %s: %v", dir, err)
+	}
+	
+	// Handle binary files encoded as base64
+	if file.Encoding == "base64" {
+		decoded, err := base64.StdEncoding.DecodeString(file.Content)
+		if err != nil {
+			return fmt.Errorf("failed to decode base64 file %s: %v", file.Path, err)
+		}
+		if err := os.WriteFile(fullPath, decoded, 0644); err != nil {
+			return fmt.Errorf("failed to write binary file %s: %v", file.Path, err)
+		}
+	} else {
+		// Text file
+		if err := os.WriteFile(fullPath, []byte(file.Content), 0644); err != nil {
+			return fmt.Errorf("failed to write text file %s: %v", file.Path, err)
+		}
+	}
+	
+	return nil
+}
+
