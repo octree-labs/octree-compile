@@ -164,6 +164,12 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 			return c.errorResult(metadata, fmt.Sprintf("Failed to create temp directory: %v", err), queueMs, receivedAt)
 		}
 		log.Printf("[%s] Created new temp directory: %s", c.RequestID, tempDir)
+		
+		// If we have a projectID, we want to cache this directory, so don't clean it up
+		if projectID != "" && isMultiFile {
+			shouldCleanup = false
+			log.Printf("[%s] Temp directory will be cached for project: %s", c.RequestID, projectID)
+		}
 	}
 
 	if shouldCleanup {
@@ -207,17 +213,42 @@ func (c *Compiler) Compile(content string, files []FileEntry, enqueuedAt time.Ti
 	
 	// Override strategy for incremental compilation
 	if isIncremental && fileChanges != nil {
-		// Adjust strategy based on what changed
-		if !fileChanges.HasTexChanges && fileChanges.HasBibChanges {
-			// Only bibliography files changed - skip first pdflatex
-			log.Printf("[%s] INCREMENTAL: Only .bib files changed, optimized strategy", c.RequestID)
+		// Optimization based on what changed:
+		// Key insight: If .bib unchanged, .bbl file is still valid → skip bibtex!
+		
+		if !fileChanges.HasBibChanges {
+			// Case 1, 3, 5: .bib files unchanged → .bbl file is still valid
+			if fileChanges.HasTexChanges && !fileChanges.HasAssetChanges {
+				// Case 1: Only .tex changed (most common!)
+				log.Printf("[%s] INCREMENTAL: Only .tex changed, skipping bibtex (reusing .bbl)", c.RequestID)
+				needsBib = false
+				// Keep needsMultiPass as-is for cross-references in .tex
+			} else if !fileChanges.HasTexChanges && fileChanges.HasAssetChanges {
+				// Case 3: Only assets changed
+				log.Printf("[%s] INCREMENTAL: Only assets changed, single pass", c.RequestID)
+				needsBib = false
+				needsMultiPass = false // Cross-refs already resolved
+			} else if fileChanges.HasTexChanges && fileChanges.HasAssetChanges {
+				// Case 5: .tex + assets changed
+				log.Printf("[%s] INCREMENTAL: .tex + assets changed, skipping bibtex", c.RequestID)
+				needsBib = false
+				// Keep needsMultiPass as-is for cross-references in .tex
+			} else {
+				// Case 8: Nothing changed (shouldn't happen, but defensive)
+				log.Printf("[%s] INCREMENTAL: No changes detected", c.RequestID)
+				needsBib = false
+				needsMultiPass = false
+			}
+		} else if !fileChanges.HasTexChanges {
+			// Case 2, 6: Only .bib (and maybe assets) changed
+			// → .aux file still valid, but need to regenerate .bbl
+			// TODO: Optimize to skip first pdflatex (requires new pipeline branch)
+			log.Printf("[%s] INCREMENTAL: Only .bib/assets changed (could skip first pdflatex)", c.RequestID)
 			needsBib = true
-		} else if !fileChanges.HasTexChanges && !fileChanges.HasBibChanges && fileChanges.HasAssetChanges {
-			// Only assets changed - single pass is enough
-			log.Printf("[%s] INCREMENTAL: Only assets changed, single pass", c.RequestID)
-			needsBib = false
-			needsMultiPass = false
+			// Currently runs full pipeline, future optimization possible
 		}
+		// Case 4, 7: .tex + .bib changed → No optimization, run full pipeline
+		// This falls through with original needsBib and needsMultiPass values
 	}
 	
 	log.Printf("[%s] Compilation strategy - Bibliography: %v, Multi-pass: %v, Incremental: %v", 
