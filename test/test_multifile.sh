@@ -3,7 +3,8 @@
 # Test script for multi-file LaTeX compilation
 # This demonstrates the new multi-file API
 
-BASE_URL="http://localhost:3001"
+API_BASE_URL=${API_BASE_URL:-http://138.197.13.3:3001}
+COMPILE_URL="$API_BASE_URL/compile"
 
 echo "======================================"
 echo "Multi-File LaTeX Compilation Tests"
@@ -11,20 +12,25 @@ echo "======================================"
 echo
 
 # Test 1: Single file (backward compatibility)
-echo "Test 1: Single file mode (backward compatible)"
-echo "----------------------------------------------"
-curl -X POST "$BASE_URL/compile" \
+echo "Test 1: Single file (basic document)"
+echo "------------------------------------"
+curl -X POST "$COMPILE_URL" \
   -H "Content-Type: application/json" \
   -d '{
-    "content": "\\documentclass{article}\\begin{document}Hello World!\\end{document}"
+    "files": [
+      {
+        "path": "main.tex",
+        "content": "\\documentclass{article}\\begin{document}Hello World!\\end{document}"
+      }
+    ]
   }' \
   -o /tmp/test1.pdf \
-  -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
+  -sS -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
 
 # Test 2: Multi-file simple (no bibliography)
 echo "Test 2: Multi-file simple (fast path)"
 echo "--------------------------------------"
-curl -X POST "$BASE_URL/compile" \
+curl -X POST "$COMPILE_URL" \
   -H "Content-Type: application/json" \
   -d '{
     "files": [
@@ -39,12 +45,12 @@ curl -X POST "$BASE_URL/compile" \
     ]
   }' \
   -o /tmp/test2.pdf \
-  -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
+  -sS -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
 
 # Test 3: Multi-file with cross-references (two passes)
 echo "Test 3: Multi-file with cross-references (two passes)"
 echo "------------------------------------------------------"
-curl -X POST "$BASE_URL/compile" \
+curl -X POST "$COMPILE_URL" \
   -H "Content-Type: application/json" \
   -d '{
     "files": [
@@ -55,12 +61,12 @@ curl -X POST "$BASE_URL/compile" \
     ]
   }' \
   -o /tmp/test3.pdf \
-  -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
+  -sS -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
 
 # Test 4: Multi-file with bibliography (full pipeline)
 echo "Test 4: Multi-file with bibliography (full pipeline)"
 echo "-----------------------------------------------------"
-curl -X POST "$BASE_URL/compile" \
+curl -X POST "$COMPILE_URL" \
   -H "Content-Type: application/json" \
   -d '{
     "files": [
@@ -75,12 +81,12 @@ curl -X POST "$BASE_URL/compile" \
     ]
   }' \
   -o /tmp/test4.pdf \
-  -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
+  -sS -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
 
 # Test 5: Complex multi-file with custom package
 echo "Test 5: Complex multi-file with custom package"
 echo "-----------------------------------------------"
-curl -X POST "$BASE_URL/compile" \
+curl -X POST "$COMPILE_URL" \
   -H "Content-Type: application/json" \
   -d '{
     "files": [
@@ -99,7 +105,7 @@ curl -X POST "$BASE_URL/compile" \
     ]
   }' \
   -o /tmp/test5.pdf \
-  -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
+  -sS -w "\nStatus: %{http_code}\nTime: %{time_total}s\n\n"
 
 echo "======================================"
 echo "Tests Complete!"

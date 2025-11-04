@@ -7,7 +7,8 @@ RED='\033[0;31m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-API="http://138.197.13.3:3001/compile"
+API_BASE_URL=${API_BASE_URL:-http://138.197.13.3:3001}
+API="$API_BASE_URL/compile"
 RESULTS_FILE="/tmp/load-test-results-$(date +%s).txt"
 
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"

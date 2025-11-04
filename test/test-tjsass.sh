@@ -7,7 +7,8 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-API="http://138.197.13.3:3001/compile"
+API_BASE_URL=${API_BASE_URL:-http://138.197.13.3:3001}
+API="$API_BASE_URL/compile"
 PROJECT_ID="tjsass-test-$(date +%s)"
 BASE_DIR="/Users/iqbalyusuf/Documents/Code/octree-compile/test/files/Transactions_of_the_Japan_Society_for_Aeronautical_and_Space_Science__TJSASS__Template__1_"
 

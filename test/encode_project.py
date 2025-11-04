@@ -46,13 +46,13 @@ def is_binary_file(filename):
     # Default: try to read as text
     return False
 
-def encode_file(filepath, project_root, main_tex_candidates):
+def encode_file(filepath, project_root, main_tex_candidates, has_main_tex):
     """Encode a file as either text or base64 binary."""
     relative_path = os.path.relpath(filepath, project_root)
     filename = os.path.basename(filepath)
     
     # If this is a candidate main .tex file and there's no main.tex yet, rename it
-    if filename in main_tex_candidates and relative_path.endswith('.tex') and '/' not in relative_path:
+    if not has_main_tex and filename in main_tex_candidates and relative_path.endswith('.tex') and '/' not in relative_path:
         relative_path = 'main.tex'
     
     try:
@@ -104,7 +104,7 @@ def encode_project(project_dir, output_file=None):
                 break
         break
     
-    has_main_tex = False
+    has_main_tex = (project_path / "main.tex").is_file()
     
     # Walk through directory
     for root, dirs, filenames in os.walk(project_path):
@@ -116,11 +116,8 @@ def encode_project(project_dir, output_file=None):
             if filename.startswith('.') or filename in ['texput.log']:
                 continue
             
-            if filename == 'main.tex':
-                has_main_tex = True
-            
             filepath = os.path.join(root, filename)
-            file_entry = encode_file(filepath, project_path, main_tex_candidates if not has_main_tex else set())
+            file_entry = encode_file(filepath, project_path, main_tex_candidates if not has_main_tex else set(), has_main_tex)
             
             if file_entry:
                 files.append(file_entry)

@@ -5,7 +5,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-API="http://138.197.13.3:3001/compile"
+API_BASE_URL=${API_BASE_URL:-http://138.197.13.3:3001}
+API="$API_BASE_URL/compile"
 PROJECT_ID="test-project-123"
 
 echo -e "${BLUE}========================================${NC}"
