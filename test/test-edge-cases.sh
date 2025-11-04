@@ -6,7 +6,8 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-API="http://138.197.13.3:3001/compile"
+# Accept API URL as argument, default to TeX Live server
+API="${1:-http://138.197.13.3:3001/compile}"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}Testing Edge Cases & Cache Robustness${NC}"

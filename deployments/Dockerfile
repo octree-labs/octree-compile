@@ -24,7 +24,7 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
-# Install TexLive and dependencies
+# Install TexLive, Tectonic, and dependencies
 RUN apt-get update && apt-get install -y \
     texlive-latex-base \
     texlive-latex-extra \
@@ -34,7 +34,14 @@ RUN apt-get update && apt-get install -y \
     texlive-publishers \
     texlive-bibtex-extra \
     biber \
+    curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Tectonic using the official installer script
+RUN curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh -s -- -y \
+    && mv /tectonic /usr/local/bin/tectonic \
+    && chmod +x /usr/local/bin/tectonic
 
 WORKDIR /app
 

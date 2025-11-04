@@ -5,7 +5,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-API="http://138.197.13.3:3001/compile"
+# Accept API URL as argument, default to TeX Live server
+API="${1:-http://138.197.13.3:3001/compile}"
 PROJECT_ID="incremental-test-project"
 
 echo -e "${BLUE}Testing True Incremental Compilation${NC}"

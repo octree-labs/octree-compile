@@ -3,7 +3,8 @@
 # Test script for multi-file LaTeX compilation
 # This demonstrates the new multi-file API
 
-BASE_URL="http://localhost:3001"
+# Accept base URL as argument, default to localhost
+BASE_URL="${1:-http://localhost:3001}"
 
 echo "======================================"
 echo "Multi-File LaTeX Compilation Tests"

@@ -11,8 +11,8 @@ import (
 
 const (
 	CacheExpirationTime = 30 * time.Minute // Evict after 30 minutes of inactivity
-	MaxCachedProjects   = 15                // Maximum number of projects to cache
-	CleanupInterval     = 5 * time.Minute   // Run cleanup every 5 minutes
+	MaxCachedProjects   = 15               // Maximum number of projects to cache
+	CleanupInterval     = 60 * time.Minute // Run cleanup every 60 minutes
 )
 
 // CacheEntry represents a cached compilation for a project
@@ -221,8 +221,8 @@ func (c *CompilationCache) Stats() map[string]interface{} {
 	defer c.globalMutex.RUnlock()
 
 	return map[string]interface{}{
-		"entries":     len(c.entries),
-		"maxEntries":  MaxCachedProjects,
+		"entries":           len(c.entries),
+		"maxEntries":        MaxCachedProjects,
 		"expirationMinutes": int(CacheExpirationTime.Minutes()),
 	}
 }
@@ -236,7 +236,7 @@ func HashFileContent(content string) string {
 // HashFileSet generates a SHA256 hash of all files in the set
 func HashFileSet(files []FileEntry) string {
 	hasher := sha256.New()
-	
+
 	for _, file := range files {
 		// Include path and content in hash
 		hasher.Write([]byte(file.Path))
@@ -244,7 +244,138 @@ func HashFileSet(files []FileEntry) string {
 		hasher.Write([]byte(file.Content))
 		hasher.Write([]byte{0}) // Separator
 	}
-	
+
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
+// CacheSession encapsulates a project-scoped cache interaction.
+// It guarantees serialization via project-level locking and exposes
+// helper methods for serving cached results, preparing incremental
+// compilations, and persisting fresh compilation artefacts.
+type CacheSession struct {
+	cache     *CompilationCache
+	projectID string
+	locked    bool
+}
+
+// AcquireCacheSession obtains a cache session for the given project.
+// The caller MUST call Release() when finished.
+func AcquireCacheSession(projectID string) *CacheSession {
+	if projectID == "" {
+		return nil
+	}
+
+	cache := GetCache()
+	cache.LockProject(projectID)
+
+	return &CacheSession{
+		cache:     cache,
+		projectID: projectID,
+		locked:    true,
+	}
+}
+
+// Release releases the project lock held by the session.
+func (s *CacheSession) Release() {
+	if s == nil || !s.locked {
+		return
+	}
+
+	s.cache.UnlockProject(s.projectID)
+	s.locked = false
+}
+
+// TryServeCachedResult returns a cached compile result if the provided
+// file set matches the cached content hash. Returns nil on cache miss.
+func (s *CacheSession) TryServeCachedResult(files []FileEntry, requestID string, enqueuedAt time.Time) *CompileResult {
+	if s == nil || len(files) == 0 {
+		return nil
+	}
+
+	contentHash := HashFileSet(files)
+	if !s.cache.CheckContentHash(s.projectID, contentHash) {
+		log.Printf("[%s] Cache miss for project %s - proceeding with compilation", requestID, s.projectID)
+		return nil
+	}
+
+	entry, exists := s.cache.Get(s.projectID)
+	if !exists || entry == nil || len(entry.LastPDFData) == 0 {
+		log.Printf("[%s] Cache hash matched but data unavailable for project %s", requestID, s.projectID)
+		return nil
+	}
+
+	receivedAt := time.Now()
+	queueMs := receivedAt.Sub(enqueuedAt).Milliseconds()
+	completedAt := time.Now()
+	durationMs := completedAt.Sub(receivedAt).Milliseconds()
+
+	log.Printf("[%s] 🚀 UNIVERSAL CACHE HIT: returning cached PDF (%d bytes, %dms)", requestID, len(entry.LastPDFData), durationMs)
+
+	return &CompileResult{
+		RequestID:  requestID,
+		Success:    true,
+		PDFData:    entry.LastPDFData,
+		SHA256:     entry.LastSHA256,
+		QueueMs:    queueMs,
+		DurationMs: durationMs,
+		PDFSize:    len(entry.LastPDFData),
+		CacheHit:   true,
+	}
+}
+
+// PrepareIncrementalWorkspace returns details required to perform an
+// incremental TeX Live compilation if a cached temp directory exists.
+// It returns the temp directory, file change summary, and whether the
+// invocation is incremental. On miss, the zero values are returned.
+func (s *CacheSession) PrepareIncrementalWorkspace(files []FileEntry, requestID string) (string, *FileChanges, bool) {
+	if s == nil || len(files) == 0 {
+		return "", nil, false
+	}
+
+	entry, exists := s.cache.Get(s.projectID)
+	if !exists || entry == nil || entry.TempDir == "" {
+		return "", nil, false
+	}
+
+	if _, err := os.Stat(entry.TempDir); err != nil {
+		log.Printf("[%s] Cached temp dir %s unavailable (%v) -- creating new workspace", requestID, entry.TempDir, err)
+		return "", nil, false
+	}
+
+	log.Printf("[%s] Using cached temp directory: %s", requestID, entry.TempDir)
+	changes := diffFiles(files, entry.FileHashes)
+	changeCount := len(changes.Added) + len(changes.Modified) + len(changes.Deleted)
+	log.Printf("[%s] File changes: %d added, %d modified, %d deleted (total: %d)",
+		requestID, len(changes.Added), len(changes.Modified), len(changes.Deleted), changeCount)
+	log.Printf("[%s] Change types: tex=%v bib=%v assets=%v",
+		requestID, changes.HasTexChanges, changes.HasBibChanges, changes.HasAssetChanges)
+
+	return entry.TempDir, changes, true
+}
+
+// StoreCompilation caches the successful compilation artefacts for future use.
+// tempDir can be empty for engines that don't reuse workspaces (e.g. Tectonic).
+func (s *CacheSession) StoreCompilation(files []FileEntry, tempDir string, pdfData []byte, sha256Hex string, requestID string, engine string) {
+	if s == nil || len(files) == 0 || len(pdfData) == 0 || sha256Hex == "" {
+		return
+	}
+
+	contentHash := HashFileSet(files)
+	fileHashes := buildFileHashMap(files)
+
+	entry := &CacheEntry{
+		ProjectID:      s.projectID,
+		TempDir:        tempDir,
+		FileHashes:     fileHashes,
+		ContentHash:    contentHash,
+		LastPDFData:    pdfData,
+		LastSHA256:     sha256Hex,
+		LastAccessTime: time.Now(),
+	}
+
+	s.cache.Set(s.projectID, entry)
+	if engine == "" {
+		engine = "unknown"
+	}
+	log.Printf("[%s] ✅ Cached %s compilation result for project %s", requestID, engine, s.projectID)
+}

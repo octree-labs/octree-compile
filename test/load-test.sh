@@ -7,7 +7,8 @@ RED='\033[0;31m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-API="http://138.197.13.3:3001/compile"
+# Accept API URL as argument, default to Tectonic server
+API="${1:-http://167.172.16.84:3001/compile}"
 RESULTS_FILE="/tmp/load-test-results-$(date +%s).txt"
 
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"

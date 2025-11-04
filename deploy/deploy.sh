@@ -2,6 +2,12 @@
 
 set -e  # Exit on any error
 
+# Resolve repository root so the script works no matter where it is invoked from
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+cd "${REPO_ROOT}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -9,7 +15,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-SERVER_IP="138.197.13.3"
+SERVER_IP="167.172.16.84"
 SERVER_USER="root"
 REMOTE_DIR="/root/octree-compile"
 SERVICE_NAME="octree-compile"
@@ -34,22 +40,22 @@ set -e
 cd /root/octree-compile
 
 echo "🛑 Stopping existing containers..."
-docker-compose -f deployments/docker-compose.yml down || true
+docker compose -f deployments/docker-compose.yml down || true
 
 echo "🏗️  Building Docker image..."
-docker-compose -f deployments/docker-compose.yml build --no-cache
+docker compose -f deployments/docker-compose.yml build --no-cache
 
 echo "🚀 Starting services..."
-docker-compose -f deployments/docker-compose.yml up -d
+docker compose -f deployments/docker-compose.yml up -d
 
 echo "⏳ Waiting for service to be ready..."
 sleep 5
 
 echo "✅ Checking service status..."
-docker-compose -f deployments/docker-compose.yml ps
+docker compose -f deployments/docker-compose.yml ps
 
 echo "📊 Container logs:"
-docker-compose -f deployments/docker-compose.yml logs --tail=20
+docker compose -f deployments/docker-compose.yml logs --tail=20
 
 echo "🧪 Testing health endpoint..."
 curl -s http://localhost:3001/health || echo "Health check failed"
@@ -73,10 +79,10 @@ echo -e "${GREEN}Deployment Complete!${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
 echo ""
 echo "📝 Useful commands:"
-echo "  View logs:    ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.yml logs -f'"
-echo "  Restart:      ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.yml restart'"
-echo "  Stop:         ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.yml down'"
-echo "  Shell access: ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.yml exec latex-compile /bin/sh'"
+echo "  View logs:    ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f deployments/docker-compose.yml logs -f'"
+echo "  Restart:      ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f deployments/docker-compose.yml restart'"
+echo "  Stop:         ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f deployments/docker-compose.yml down'"
+echo "  Shell access: ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f deployments/docker-compose.yml exec latex-compile /bin/sh'"
 echo ""
 echo "🌐 API Endpoints:"
 echo "  Health: http://$SERVER_IP:3001/health"
