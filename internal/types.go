@@ -5,25 +5,23 @@ import "time"
 // FileEntry represents a single file in a multi-file project
 type FileEntry struct {
 	Path     string `json:"path"`
-	Content  string `json:"content"`           // Text content (for .tex, .sty, etc.)
+	Content  string `json:"content"`            // Text content (for .tex, .sty, etc.)
 	Encoding string `json:"encoding,omitempty"` // "base64" for binary files, empty for text
 }
 
 // CompileRequest represents the incoming compilation request
 type CompileRequest struct {
-	Content          string      `json:"content,omitempty"`          // Single file (backward compat)
-	Files            []FileEntry `json:"files,omitempty"`            // Multi-file
-	ProjectID        string      `json:"projectId,omitempty"`        // Project identifier for caching
-	LastModifiedFile string      `json:"lastModifiedFile,omitempty"` // Hint for which file changed
+	Files            []FileEntry `json:"files"`
+	ProjectID        string      `json:"projectId,omitempty"`
+	LastModifiedFile string      `json:"lastModifiedFile,omitempty"`
 }
 
 // CompileJob represents a queued compilation job
 type CompileJob struct {
-	Context          interface{}        // Will be *gin.Context
-	Content          string             // Single file content (backward compat)
-	Files            []FileEntry        // Multi-file content
-	ProjectID        string             // Project identifier for caching
-	LastModifiedFile string             // Hint for which file changed
+	Context          interface{} // Will be *gin.Context
+	Files            []FileEntry // Multi-file content
+	ProjectID        string      // Project identifier for caching
+	LastModifiedFile string      // Hint for which file changed
 	EnqueuedAt       time.Time
 	ResultChan       chan *CompileResult // Channel to send result back to handler
 }
@@ -81,4 +79,3 @@ type ErrorResponse struct {
 	Stderr     string `json:"stderr,omitempty"`
 	Log        string `json:"log,omitempty"`
 }
-

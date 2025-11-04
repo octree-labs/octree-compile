@@ -29,38 +29,23 @@ func HealthHandler(c *gin.Context) {
 func CompileHandler(c *gin.Context) {
 	// Parse request
 	var req CompileRequest
-	
-	// Try JSON first
 	if err := c.ShouldBindJSON(&req); err != nil {
-		// Try raw body
-		body, err := c.GetRawData()
-		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{
-				Error:   "Invalid request",
-				Message: "Could not read request body",
-			})
-			return
-		}
-		req.Content = string(body)
-	}
-
-	// Validate: must have either content or files
-	if req.Content == "" && len(req.Files) == 0 {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:   "Invalid request",
-			Message: "LaTeX content or files array is required",
+			Message: "Could not parse JSON payload",
 		})
 		return
 	}
-	
-	// Convert single content to multi-file format internally
-	var files []FileEntry
-	if len(req.Files) > 0 {
-		files = req.Files
-	} else if req.Content != "" {
-		// Backward compatibility: single content becomes main.tex
-		files = []FileEntry{{Path: "main.tex", Content: req.Content}}
+
+	if len(req.Files) == 0 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "Invalid request",
+			Message: "The files array must contain at least one file",
+		})
+		return
 	}
+
+	files := req.Files
 
 	// Log project ID if provided
 	if req.ProjectID != "" {
@@ -80,7 +65,6 @@ func CompileHandler(c *gin.Context) {
 	// Create job with result channel
 	job := &CompileJob{
 		Context:          c,
-		Content:          req.Content, // Keep for backward compat logging
 		Files:            files,
 		ProjectID:        req.ProjectID,
 		LastModifiedFile: req.LastModifiedFile,
@@ -93,12 +77,12 @@ func CompileHandler(c *gin.Context) {
 	case requestQueue <- job:
 		// Wait for worker to send result back
 		result := <-job.ResultChan
-		
+
 		// Set custom headers
 		c.Header("X-Compile-Request-Id", result.RequestID)
 		c.Header("X-Compile-Duration-Ms", fmt.Sprintf("%d", result.DurationMs))
 		c.Header("X-Compile-Queue-Ms", fmt.Sprintf("%d", result.QueueMs))
-		
+
 		// Send response based on result
 		if result.Success {
 			c.Header("X-Compile-Sha256", result.SHA256)
@@ -140,9 +124,8 @@ func HandleCompilation(job *CompileJob) {
 	}()
 
 	comp := New()
-	result := comp.Compile(job.Content, job.Files, job.EnqueuedAt, job.ProjectID)
-	
+	result := comp.Compile(job.Files, job.EnqueuedAt, job.ProjectID)
+
 	// Send result back to handler through channel
 	job.ResultChan <- result
 }
-
