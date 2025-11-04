@@ -46,14 +46,10 @@ def is_binary_file(filename):
     # Default: try to read as text
     return False
 
-def encode_file(filepath, project_root, main_tex_candidates, has_main_tex):
+def encode_file(filepath, project_root):
     """Encode a file as either text or base64 binary."""
     relative_path = os.path.relpath(filepath, project_root)
     filename = os.path.basename(filepath)
-    
-    # If this is a candidate main .tex file and there's no main.tex yet, rename it
-    if not has_main_tex and filename in main_tex_candidates and relative_path.endswith('.tex') and '/' not in relative_path:
-        relative_path = 'main.tex'
     
     try:
         if is_binary_file(filepath):
@@ -94,16 +90,19 @@ def encode_project(project_dir, output_file=None):
     binary_count = 0
     skipped_count = 0
     
-    # Find the main .tex file candidate
+# Find the main .tex file candidate (first root-level .tex)
     main_tex_candidates = set()
+    fallback_main_path = None
     for root, dirs, filenames in os.walk(project_path):
         for filename in filenames:
             if filename.endswith('.tex') and root == str(project_path):
                 # First .tex file in root directory is a candidate
                 main_tex_candidates.add(filename)
+                if fallback_main_path is None:
+                    fallback_main_path = filename
                 break
         break
-    
+
     has_main_tex = (project_path / "main.tex").is_file()
     
     # Walk through directory
@@ -117,7 +116,7 @@ def encode_project(project_dir, output_file=None):
                 continue
             
             filepath = os.path.join(root, filename)
-            file_entry = encode_file(filepath, project_path, main_tex_candidates if not has_main_tex else set(), has_main_tex)
+            file_entry = encode_file(filepath, project_path)
             
             if file_entry:
                 files.append(file_entry)
@@ -133,7 +132,7 @@ def encode_project(project_dir, output_file=None):
     if not files:
         print(f"❌ No files found in '{project_dir}'", file=sys.stderr)
         sys.exit(1)
-    
+
     # Create JSON payload
     payload = {"files": files}
     
