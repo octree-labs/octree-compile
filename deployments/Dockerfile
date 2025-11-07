@@ -38,7 +38,6 @@ RUN apt-get update && apt-get install -y \
     texlive-lang-chinese \
     texlive-lang-cjk \
     texlive-extra-utils \
-    texlive-fontawesome \
     latexmk \
     fonts-ubuntu \
     fonts-noto-cjk \
