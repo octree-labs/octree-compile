@@ -476,7 +476,12 @@ func (s *compileSession) finalize(cache *CompilationCache) *CompileResult {
 
 		s.metadata.LogTail = tailLines(truncateText(logContent, MaxLogChars), LogTailLines)
 
-		if s.exitCode != 0 {
+		// LaTeX exit codes:
+		// 0 = success with no warnings
+		// 1 = fatal error (no PDF)
+		// 2 = success with warnings (e.g., missing citations, undefined references)
+		// Since we have a valid PDF, treat exit codes 0-2 as success
+		if s.exitCode > 2 {
 			errMsg := fmt.Sprintf("LaTeX toolchain exited with code %d", s.exitCode)
 			log.Printf("[%s] Compilation produced PDF but exited with code %d", s.compiler.RequestID, s.exitCode)
 			s.metadata.Status = "error"
@@ -493,6 +498,10 @@ func (s *compileSession) finalize(cache *CompilationCache) *CompileResult {
 				QueueMs:      s.queueMs,
 				DurationMs:   durationMs,
 			}
+		}
+
+		if s.exitCode == 2 {
+			log.Printf("[%s] LaTeX completed with warnings (exit code 2), but PDF was generated successfully", s.compiler.RequestID)
 		}
 
 		s.metadata.Status = "success"
