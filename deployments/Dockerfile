@@ -28,11 +28,21 @@ ENV TZ=UTC
 RUN apt-get update && apt-get install -y \
     texlive-latex-base \
     texlive-latex-extra \
+    texlive-xetex \
+    texlive-luatex \
     texlive-fonts-recommended \
     texlive-fonts-extra \
     texlive-science \
     texlive-publishers \
     texlive-bibtex-extra \
+    texlive-lang-chinese \
+    texlive-lang-cjk \
+    texlive-extra-utils \
+    latexmk \
+    fonts-ubuntu \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
+    curl \
     biber \
     && rm -rf /var/lib/apt/lists/*
 
