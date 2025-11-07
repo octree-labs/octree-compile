@@ -349,23 +349,18 @@ func (s *compileSession) adjustStrategyForIncremental(needsBib bool, needsMultiP
 		return needsBib, needsMultiPass
 	}
 
-	// When bibliography files are unchanged we can often skip rerunning the bibliography tool.
 	if !changes.HasBibChanges {
 		switch {
-		case changes.HasTexChanges && !changes.HasAssetChanges:
-			log.Printf("[%s] INCREMENTAL: Only .tex changed, skipping bibliography processor (reusing previous output)", s.compiler.RequestID)
-			return false, needsMultiPass
 		case !changes.HasTexChanges && changes.HasAssetChanges:
 			log.Printf("[%s] INCREMENTAL: Only assets changed, single pass", s.compiler.RequestID)
 			return false, false
-		case changes.HasTexChanges && changes.HasAssetChanges:
-			log.Printf("[%s] INCREMENTAL: .tex + assets changed, skipping bibliography processor", s.compiler.RequestID)
-			return false, needsMultiPass
 		case !changes.HasTexChanges && !changes.HasAssetChanges:
 			log.Printf("[%s] INCREMENTAL: No changes detected", s.compiler.RequestID)
 			return false, false
 		default:
-			return needsBib, needsMultiPass
+			// .tex changed (with/without assets); still run bibliography to refresh citations.
+			log.Printf("[%s] INCREMENTAL: .tex changed with existing bibliography; rerunning bibliography processor", s.compiler.RequestID)
+			return true, needsMultiPass
 		}
 	}
 
