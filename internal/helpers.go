@@ -36,6 +36,25 @@ func min(a, b int) int {
 	return b
 }
 
+type bibliographyTool int
+
+const (
+	bibliographyToolNone bibliographyTool = iota
+	bibliographyToolBibtex
+	bibliographyToolBiber
+)
+
+func (t bibliographyTool) String() string {
+	switch t {
+	case bibliographyToolBibtex:
+		return "bibtex"
+	case bibliographyToolBiber:
+		return "biber"
+	default:
+		return "none"
+	}
+}
+
 // needsBibliography checks if content requires bibliography processing
 func needsBibliography(content string, files []FileEntry) bool {
 	// Check for .bib files in the files array
@@ -44,7 +63,7 @@ func needsBibliography(content string, files []FileEntry) bool {
 			return true
 		}
 	}
-	
+
 	// Check for bibliography commands in content
 	bibCommands := []string{
 		"\\bibliography{",
@@ -54,14 +73,53 @@ func needsBibliography(content string, files []FileEntry) bool {
 		"\\citet{",
 		"\\nocite{",
 	}
-	
+
 	for _, cmd := range bibCommands {
 		if strings.Contains(content, cmd) {
 			return true
 		}
 	}
-	
+
 	return false
+}
+
+func detectBibliographyTool(mainContent string, files []FileEntry) bibliographyTool {
+	contentsToScan := []string{mainContent}
+
+	for _, file := range files {
+		if file.Encoding == "base64" {
+			continue
+		}
+		if !strings.HasSuffix(file.Path, ".tex") && !strings.HasSuffix(file.Path, ".sty") && !strings.HasSuffix(file.Path, ".cls") {
+			continue
+		}
+		contentsToScan = append(contentsToScan, file.Content)
+	}
+
+	seenBiblatex := false
+
+	for _, content := range contentsToScan {
+		lower := strings.ToLower(content)
+
+		if strings.Contains(lower, "backend=bibtex") || strings.Contains(lower, "backend = bibtex") {
+			return bibliographyToolBibtex
+		}
+		if strings.Contains(lower, "backend=biber") || strings.Contains(lower, "backend = biber") {
+			seenBiblatex = true
+		}
+		if strings.Contains(lower, "\\usepackage{biblatex}") || (strings.Contains(lower, "\\usepackage[") && strings.Contains(lower, "{biblatex}")) || strings.Contains(lower, "\\requirepackage{biblatex}") || (strings.Contains(lower, "\\requirepackage[") && strings.Contains(lower, "{biblatex}")) {
+			seenBiblatex = true
+		}
+		if strings.Contains(lower, "\\addbibresource") || strings.Contains(lower, "\\printbibliography") || strings.Contains(lower, "\\executebibliographyoptions") {
+			seenBiblatex = true
+		}
+	}
+
+	if seenBiblatex {
+		return bibliographyToolBiber
+	}
+
+	return bibliographyToolBibtex
 }
 
 // needsMultiplePasses checks if content requires multiple compilation passes
@@ -76,13 +134,13 @@ func needsMultiplePasses(content string) bool {
 		"\\listoffigures",
 		"\\listoftables",
 	}
-	
+
 	for _, cmd := range refCommands {
 		if strings.Contains(content, cmd) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -91,13 +149,13 @@ func needsMultiplePasses(content string) bool {
 func createFileStructure(tempDir string, files []FileEntry) error {
 	for _, file := range files {
 		fullPath := filepath.Join(tempDir, file.Path)
-		
+
 		// Create directory if needed
 		dir := filepath.Dir(fullPath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %v", dir, err)
 		}
-		
+
 		// Handle binary files encoded as base64
 		if file.Encoding == "base64" {
 			decoded, err := base64.StdEncoding.DecodeString(file.Content)
@@ -114,15 +172,15 @@ func createFileStructure(tempDir string, files []FileEntry) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
 // FileChanges represents changes between file sets
 type FileChanges struct {
-	Added    []FileEntry
-	Modified []FileEntry
-	Deleted  []string // Just the paths
+	Added           []FileEntry
+	Modified        []FileEntry
+	Deleted         []string // Just the paths
 	HasTexChanges   bool
 	HasBibChanges   bool
 	HasAssetChanges bool
@@ -143,7 +201,7 @@ func diffFiles(currentFiles []FileEntry, cachedHashes map[string]string) *FileCh
 	for _, file := range currentFiles {
 		seen[file.Path] = true
 		currentHash := HashFileContent(file.Content)
-		
+
 		if cachedHash, exists := cachedHashes[file.Path]; exists {
 			// File exists in cache
 			if currentHash != cachedHash {
@@ -219,13 +277,13 @@ func updateCachedFiles(tempDir string, changes *FileChanges) error {
 // writeFile writes a single file to the temp directory
 func writeFile(tempDir string, file FileEntry) error {
 	fullPath := filepath.Join(tempDir, file.Path)
-	
+
 	// Create directory if needed
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %v", dir, err)
 	}
-	
+
 	// Handle binary files encoded as base64
 	if file.Encoding == "base64" {
 		decoded, err := base64.StdEncoding.DecodeString(file.Content)
@@ -241,7 +299,6 @@ func writeFile(tempDir string, file FileEntry) error {
 			return fmt.Errorf("failed to write text file %s: %v", file.Path, err)
 		}
 	}
-	
+
 	return nil
 }
-

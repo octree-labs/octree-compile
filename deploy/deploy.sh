@@ -33,6 +33,18 @@ set -e
 
 cd /root/octree-compile
 
+echo "🧹 Checking disk space..."
+DISK_USAGE=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+echo "Current root filesystem usage: ${DISK_USAGE}%"
+if [ "$DISK_USAGE" -gt 85 ]; then
+  echo "⚠️  Low disk space detected. Running docker prune..."
+  docker system prune -af || true
+  docker builder prune -af || true
+  docker volume prune -f || true
+  echo "Disk usage after prune:"
+  df -h /
+fi
+
 echo "🛑 Stopping existing containers..."
 docker-compose -f deployments/docker-compose.yml down || true
 

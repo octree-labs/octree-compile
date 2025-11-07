@@ -59,6 +59,7 @@ type compileSession struct {
 	stdout        bytes.Buffer
 	stderr        bytes.Buffer
 	exitCode      int
+	bibTool       bibliographyTool
 }
 
 func newCompileSession(compiler *Compiler, files []FileEntry, enqueuedAt time.Time, projectID string) *compileSession {
@@ -80,6 +81,7 @@ func newCompileSession(compiler *Compiler, files []FileEntry, enqueuedAt time.Ti
 			QueueMs:    queueMs,
 			Status:     "processing",
 		},
+		bibTool: bibliographyToolNone,
 	}
 
 	session.logInitialDetails()
@@ -319,12 +321,25 @@ func (s *compileSession) determineStrategy() (bool, bool) {
 	needsBib := needsBibliography(s.mainContent, s.files)
 	needsMultiPass := needsMultiplePasses(s.mainContent)
 
+	if needsBib {
+		s.bibTool = detectBibliographyTool(s.mainContent, s.files)
+		if s.bibTool == bibliographyToolNone {
+			s.bibTool = bibliographyToolBibtex
+		}
+	} else {
+		s.bibTool = bibliographyToolNone
+	}
+
 	if s.isIncremental && s.fileChanges != nil {
 		needsBib, needsMultiPass = s.adjustStrategyForIncremental(needsBib, needsMultiPass)
 	}
 
-	log.Printf("[%s] Compilation strategy - Bibliography: %v, Multi-pass: %v, Incremental: %v",
-		s.compiler.RequestID, needsBib, needsMultiPass, s.isIncremental)
+	if !needsBib {
+		s.bibTool = bibliographyToolNone
+	}
+
+	log.Printf("[%s] Compilation strategy - Bibliography: %v (%s), Multi-pass: %v, Incremental: %v",
+		s.compiler.RequestID, needsBib, s.bibTool.String(), needsMultiPass, s.isIncremental)
 	return needsBib, needsMultiPass
 }
 
@@ -334,17 +349,17 @@ func (s *compileSession) adjustStrategyForIncremental(needsBib bool, needsMultiP
 		return needsBib, needsMultiPass
 	}
 
-	// When bibliography files are unchanged we can often skip bibtex.
+	// When bibliography files are unchanged we can often skip rerunning the bibliography tool.
 	if !changes.HasBibChanges {
 		switch {
 		case changes.HasTexChanges && !changes.HasAssetChanges:
-			log.Printf("[%s] INCREMENTAL: Only .tex changed, skipping bibtex (reusing .bbl)", s.compiler.RequestID)
+			log.Printf("[%s] INCREMENTAL: Only .tex changed, skipping bibliography processor (reusing previous output)", s.compiler.RequestID)
 			return false, needsMultiPass
 		case !changes.HasTexChanges && changes.HasAssetChanges:
 			log.Printf("[%s] INCREMENTAL: Only assets changed, single pass", s.compiler.RequestID)
 			return false, false
 		case changes.HasTexChanges && changes.HasAssetChanges:
-			log.Printf("[%s] INCREMENTAL: .tex + assets changed, skipping bibtex", s.compiler.RequestID)
+			log.Printf("[%s] INCREMENTAL: .tex + assets changed, skipping bibliography processor", s.compiler.RequestID)
 			return false, needsMultiPass
 		case !changes.HasTexChanges && !changes.HasAssetChanges:
 			log.Printf("[%s] INCREMENTAL: No changes detected", s.compiler.RequestID)
@@ -366,24 +381,21 @@ func (s *compileSession) runCompilation(needsBib, needsMultiPass bool) {
 	s.exitCode = 0
 
 	if needsBib {
-		log.Printf("[%s] Running full bibliography pipeline", s.compiler.RequestID)
+		log.Printf("[%s] Running full bibliography pipeline using %s", s.compiler.RequestID, s.bibTool.String())
 
 		s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
 
 		if s.exitCode == 0 {
-			log.Printf("[%s] Running bibtex...", s.compiler.RequestID)
-			bibtexCmd := exec.Command("bibtex", s.jobName)
-			bibtexCmd.Dir = s.tempDir
-			bibtexCmd.Stdout = &s.stdout
-			bibtexCmd.Stderr = &s.stderr
-			_ = bibtexCmd.Run()
-
-			log.Printf("[%s] Running pdflatex (pass 2/3)...", s.compiler.RequestID)
-			s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+			s.runBibliographyProcessor()
 
 			if s.exitCode == 0 {
-				log.Printf("[%s] Running pdflatex (pass 3/3)...", s.compiler.RequestID)
+				log.Printf("[%s] Running pdflatex (pass 2/3)...", s.compiler.RequestID)
 				s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+
+				if s.exitCode == 0 {
+					log.Printf("[%s] Running pdflatex (pass 3/3)...", s.compiler.RequestID)
+					s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+				}
 			}
 		}
 	} else if needsMultiPass {
@@ -398,6 +410,31 @@ func (s *compileSession) runCompilation(needsBib, needsMultiPass bool) {
 	} else {
 		log.Printf("[%s] Running single-pass compilation", s.compiler.RequestID)
 		s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+	}
+}
+
+func (s *compileSession) runBibliographyProcessor() {
+	cmdName := "bibtex"
+	switch s.bibTool {
+	case bibliographyToolBiber:
+		cmdName = "biber"
+	case bibliographyToolBibtex:
+		cmdName = "bibtex"
+	default:
+		cmdName = "bibtex"
+	}
+
+	log.Printf("[%s] Running %s...", s.compiler.RequestID, cmdName)
+	cmd := exec.Command(cmdName, s.jobName)
+	cmd.Dir = s.tempDir
+	cmd.Stdout = &s.stdout
+	cmd.Stderr = &s.stderr
+
+	if err := cmd.Run(); err != nil {
+		log.Printf("[%s] %s exited with error: %v", s.compiler.RequestID, cmdName, err)
+		s.recordExitCode(err)
+	} else {
+		log.Printf("[%s] %s completed successfully", s.compiler.RequestID, cmdName)
 	}
 }
 
@@ -445,15 +482,16 @@ func (s *compileSession) finalize(cache *CompilationCache) *CompileResult {
 		s.metadata.LogTail = tailLines(truncateText(logContent, MaxLogChars), LogTailLines)
 
 		if s.exitCode != 0 {
+			errMsg := fmt.Sprintf("LaTeX toolchain exited with code %d", s.exitCode)
 			log.Printf("[%s] Compilation produced PDF but exited with code %d", s.compiler.RequestID, s.exitCode)
 			s.metadata.Status = "error"
-			s.metadata.Error = fmt.Sprintf("pdflatex exited with code %d", s.exitCode)
+			s.metadata.Error = errMsg
 			s.compiler.persistMetadata(s.metadata)
 
 			return &CompileResult{
 				RequestID:    s.compiler.RequestID,
 				Success:      false,
-				ErrorMessage: fmt.Sprintf("pdflatex exited with code %d", s.exitCode),
+				ErrorMessage: errMsg,
 				Stdout:       truncateText(s.stdout.String(), MaxLogChars),
 				Stderr:       truncateText(s.stderr.String(), MaxLogChars),
 				LogTail:      s.metadata.LogTail,
@@ -564,6 +602,8 @@ func (c *Compiler) persistMetadata(metadata *compileMetadata) {
 
 // runPdflatex runs a single pdflatex pass
 func (c *Compiler) runPdflatex(tempDir, texFilePath string, stdout, stderr *bytes.Buffer) error {
+	// TODO: Support alternative engines / aux tools (xelatex, latexmk, makeindex, shell-escape, etc.);
+	// documents that rely on those currently fail to compile here.
 	cmd := exec.Command("pdflatex",
 		"-interaction=nonstopmode",
 		"-halt-on-error",
