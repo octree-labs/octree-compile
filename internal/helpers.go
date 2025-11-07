@@ -101,16 +101,19 @@ func detectBibliographyTool(mainContent string, files []FileEntry) bibliographyT
 	for _, content := range contentsToScan {
 		lower := strings.ToLower(content)
 
-		if strings.Contains(lower, "backend=bibtex") || strings.Contains(lower, "backend = bibtex") {
+		switch {
+		case strings.Contains(lower, "backend=bibtex") || strings.Contains(lower, "backend = bibtex"):
 			return bibliographyToolBibtex
-		}
-		if strings.Contains(lower, "backend=biber") || strings.Contains(lower, "backend = biber") {
+		case strings.Contains(lower, "backend=biber") || strings.Contains(lower, "backend = biber"):
 			seenBiblatex = true
-		}
-		if strings.Contains(lower, "\\usepackage{biblatex}") || (strings.Contains(lower, "\\usepackage[") && strings.Contains(lower, "{biblatex}")) || strings.Contains(lower, "\\requirepackage{biblatex}") || (strings.Contains(lower, "\\requirepackage[") && strings.Contains(lower, "{biblatex}")) {
+		case strings.Contains(lower, "\\usepackage{biblatex}") || 
+			(strings.Contains(lower, "\\usepackage[") && strings.Contains(lower, "{biblatex}")) || 
+			strings.Contains(lower, "\\requirepackage{biblatex}") || 
+			(strings.Contains(lower, "\\requirepackage[") && strings.Contains(lower, "{biblatex}")):
 			seenBiblatex = true
-		}
-		if strings.Contains(lower, "\\addbibresource") || strings.Contains(lower, "\\printbibliography") || strings.Contains(lower, "\\executebibliographyoptions") {
+		case strings.Contains(lower, "\\addbibresource") || 
+			strings.Contains(lower, "\\printbibliography") || 
+			strings.Contains(lower, "\\executebibliographyoptions"):
 			seenBiblatex = true
 		}
 	}
