@@ -593,18 +593,64 @@ func (s *compileSession) runBibliographyProcessor() {
 		cmdName = "bibtex"
 	}
 
-	log.Printf("[%s] Running %s...", s.compiler.RequestID, cmdName)
-	cmd := exec.Command(cmdName, s.jobName)
-	cmd.Dir = s.tempDir
-	cmd.Stdout = &s.stdout
-	cmd.Stderr = &s.stderr
+	targets := s.collectBibliographyTargets(cmdName)
 
-	if err := cmd.Run(); err != nil {
-		log.Printf("[%s] %s exited with error: %v", s.compiler.RequestID, cmdName, err)
-		s.recordExitCode(err)
-	} else {
-		log.Printf("[%s] %s completed successfully", s.compiler.RequestID, cmdName)
+	for _, target := range targets {
+		log.Printf("[%s] Running %s for %s...", s.compiler.RequestID, cmdName, target)
+		cmd := exec.Command(cmdName, target)
+		cmd.Dir = s.tempDir
+		cmd.Stdout = &s.stdout
+		cmd.Stderr = &s.stderr
+
+		if err := cmd.Run(); err != nil {
+			log.Printf("[%s] %s (%s) exited with error: %v", s.compiler.RequestID, cmdName, target, err)
+			s.recordExitCode(err)
+			return
+		}
+
+		log.Printf("[%s] %s (%s) completed successfully", s.compiler.RequestID, cmdName, target)
 	}
+}
+
+func (s *compileSession) collectBibliographyTargets(cmdName string) []string {
+	baseTarget := s.jobName
+	targets := []string{baseTarget}
+	seen := map[string]struct{}{baseTarget: {}}
+
+	var extension string
+	switch cmdName {
+	case "biber":
+		extension = ".bcf"
+	default:
+		extension = ".aux"
+	}
+
+	entries, err := os.ReadDir(s.tempDir)
+	if err != nil {
+		log.Printf("[%s] Warning: unable to read temp directory for bibliography targets: %v", s.compiler.RequestID, err)
+		return targets
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasPrefix(name, baseTarget) || !strings.HasSuffix(name, extension) {
+			continue
+		}
+
+		target := strings.TrimSuffix(name, extension)
+		if _, exists := seen[target]; exists {
+			continue
+		}
+
+		seen[target] = struct{}{}
+		targets = append(targets, target)
+	}
+
+	return targets
 }
 
 func (s *compileSession) recordExitCode(err error) {
