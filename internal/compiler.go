@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +24,15 @@ const (
 )
 
 var historyDir string
+var usepackagePatternCache sync.Map
+
+type latexEngine string
+
+const (
+	enginePdfLaTeX latexEngine = "pdflatex"
+	engineXeLaTeX  latexEngine = "xelatex"
+	engineLuaLaTeX latexEngine = "lualatex"
+)
 
 // SetHistoryDir sets the directory for compilation history logs
 func SetHistoryDir(dir string) {
@@ -60,6 +71,7 @@ type compileSession struct {
 	stderr        bytes.Buffer
 	exitCode      int
 	bibTool       bibliographyTool
+	engine        latexEngine
 }
 
 func newCompileSession(compiler *Compiler, files []FileEntry, enqueuedAt time.Time, projectID string) *compileSession {
@@ -82,6 +94,7 @@ func newCompileSession(compiler *Compiler, files []FileEntry, enqueuedAt time.Ti
 			Status:     "processing",
 		},
 		bibTool: bibliographyToolNone,
+		engine:  enginePdfLaTeX,
 	}
 
 	session.logInitialDetails()
@@ -126,6 +139,134 @@ func (s *compileSession) logInitialDetails() {
 	preview := s.mainContent[:min(120, len(s.mainContent))]
 	preview = strings.ReplaceAll(preview, "\n", " ")
 	log.Printf("[%s] TeX preview: %s...", s.compiler.RequestID, preview)
+
+	engine, reason := s.detectEngine()
+	s.engine = engine
+	if s.metadata != nil {
+		s.metadata.Engine = string(engine)
+	}
+	if reason != "" {
+		log.Printf("[%s] Selected engine: %s (triggered by %s)", s.compiler.RequestID, engine, reason)
+	} else {
+		log.Printf("[%s] Selected engine: %s (default)", s.compiler.RequestID, engine)
+	}
+}
+
+func (s *compileSession) detectEngine() (latexEngine, string) {
+	var builder strings.Builder
+	if s.mainContent != "" {
+		builder.WriteString(s.mainContent)
+		builder.WriteString("\n")
+	}
+
+	for _, file := range s.files {
+		if file.Encoding == "base64" {
+			continue
+		}
+		if !shouldInspectForEngine(file.Path) {
+			continue
+		}
+		if file.Content == "" {
+			continue
+		}
+		builder.WriteString(file.Content)
+		builder.WriteString("\n")
+	}
+
+	content := strings.ToLower(builder.String())
+
+	if reason := detectLuaEngineTrigger(content); reason != "" {
+		return engineLuaLaTeX, reason
+	}
+	if reason := detectXeEngineTrigger(content); reason != "" {
+		return engineXeLaTeX, reason
+	}
+	return enginePdfLaTeX, ""
+}
+
+func shouldInspectForEngine(path string) bool {
+	lower := strings.ToLower(path)
+	switch {
+	case strings.HasSuffix(lower, ".tex"):
+		return true
+	case strings.HasSuffix(lower, ".sty"):
+		return true
+	case strings.HasSuffix(lower, ".cls"):
+		return true
+	case strings.HasSuffix(lower, ".ltx"):
+		return true
+	default:
+		return false
+	}
+}
+
+func detectLuaEngineTrigger(content string) string {
+	triggers := []string{
+		"\\directlua",
+		"\\usepackage{luacode",
+		"\\usepackage{luacolor",
+		"\\usepackage{luatex",
+		"\\usepackage{luaotfload",
+		"\\usepackage{luapackageloader",
+		"\\luaexec",
+		"\\luadirect",
+		"\\newluafunction",
+		"\\begin{luacode",
+	}
+
+	for _, trigger := range triggers {
+		if strings.Contains(content, trigger) {
+			return trigger
+		}
+	}
+
+	return ""
+}
+
+func detectXeEngineTrigger(content string) string {
+	if containsUsepackage(content, "fontspec") {
+		return "\\usepackage{fontspec}"
+	}
+
+	triggers := []string{
+		"\\setmainfont",
+		"\\setsansfont",
+		"\\setmonofont",
+		"\\newfontfamily",
+		"\\usepackage{xecjk",
+		"\\setcjkmainfont",
+		"\\setcjkfamilyfont",
+		"\\usepackage{polyglossia",
+		"\\usepackage{mathspec",
+		"\\usepackage{unicode-math",
+		"\\xeprintrule",
+		"\\xetex",
+		"\\defaultfontfeatures",
+	}
+
+	for _, trigger := range triggers {
+		if strings.Contains(content, trigger) {
+			return trigger
+		}
+	}
+
+	return ""
+}
+
+func containsUsepackage(content, pkg string) bool {
+	if pkg == "" {
+		return false
+	}
+
+	if cached, ok := usepackagePatternCache.Load(pkg); ok {
+		return cached.(*regexp.Regexp).MatchString(content)
+	}
+
+	pattern := fmt.Sprintf(`\\(?:use|require)package(?:\[[^\]]*\])?\{\s*%s\s*\}`, regexp.QuoteMeta(pkg))
+	re := regexp.MustCompile(pattern)
+	usepackagePatternCache.Store(pkg, re)
+
+	return re.MatchString(content)
 }
 
 func (s *compileSession) extractMainContent() string {
@@ -378,34 +519,38 @@ func (s *compileSession) runCompilation(needsBib, needsMultiPass bool) {
 	if needsBib {
 		log.Printf("[%s] Running full bibliography pipeline using %s", s.compiler.RequestID, s.bibTool.String())
 
-		s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+		s.recordExitCode(s.runLatexPass())
 
 		if s.exitCode == 0 {
 			s.runBibliographyProcessor()
 
 			if s.exitCode == 0 {
 				log.Printf("[%s] Running pdflatex (pass 2/3)...", s.compiler.RequestID)
-				s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+				s.recordExitCode(s.runLatexPass())
 
 				if s.exitCode == 0 {
 					log.Printf("[%s] Running pdflatex (pass 3/3)...", s.compiler.RequestID)
-					s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+					s.recordExitCode(s.runLatexPass())
 				}
 			}
 		}
 	} else if needsMultiPass {
 		log.Printf("[%s] Running two-pass compilation for cross-references", s.compiler.RequestID)
 
-		s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+		s.recordExitCode(s.runLatexPass())
 
 		if s.exitCode == 0 {
 			log.Printf("[%s] Running pdflatex (pass 2/2)...", s.compiler.RequestID)
-			s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+			s.recordExitCode(s.runLatexPass())
 		}
 	} else {
 		log.Printf("[%s] Running single-pass compilation", s.compiler.RequestID)
-		s.recordExitCode(s.compiler.runPdflatex(s.tempDir, s.texFilePath, &s.stdout, &s.stderr))
+		s.recordExitCode(s.runLatexPass())
 	}
+}
+
+func (s *compileSession) runLatexPass() error {
+	return s.compiler.runLatexEngine(s.engine, s.tempDir, s.texFilePath, &s.stdout, &s.stderr)
 }
 
 func (s *compileSession) runBibliographyProcessor() {
@@ -604,11 +749,12 @@ func (c *Compiler) persistMetadata(metadata *compileMetadata) {
 	}
 }
 
-// runPdflatex runs a single pdflatex pass
-func (c *Compiler) runPdflatex(tempDir, texFilePath string, stdout, stderr *bytes.Buffer) error {
-	// TODO: Support alternative engines / aux tools (xelatex, latexmk, makeindex, shell-escape, etc.);
-	// documents that rely on those currently fail to compile here.
-	cmd := exec.Command("pdflatex",
+// runLatexEngine runs a single LaTeX pass with the selected engine.
+func (c *Compiler) runLatexEngine(engine latexEngine, tempDir, texFilePath string, stdout, stderr *bytes.Buffer) error {
+	// TODO: Add support for tools like latexmk/makeindex/shell-escape when needed.
+	binary := engine.command()
+	cmd := exec.Command(
+		binary,
 		"-interaction=nonstopmode",
 		"-halt-on-error",
 		"-file-line-error",
@@ -620,4 +766,15 @@ func (c *Compiler) runPdflatex(tempDir, texFilePath string, stdout, stderr *byte
 	cmd.Stderr = stderr
 
 	return cmd.Run()
+}
+
+func (e latexEngine) command() string {
+	switch e {
+	case engineXeLaTeX:
+		return "xelatex"
+	case engineLuaLaTeX:
+		return "lualatex"
+	default:
+		return "pdflatex"
+	}
 }

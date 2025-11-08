@@ -20,31 +20,47 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o latex-compile .
 # Runtime stage
 FROM ubuntu:22.04
 
-# Prevent timezone prompts
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
+ARG TEXLIVE_YEAR=2025
 
-# Install TexLive and dependencies
-RUN apt-get update && apt-get install -y \
-    texlive-latex-base \
-    texlive-latex-extra \
-    texlive-xetex \
-    texlive-luatex \
-    texlive-fonts-recommended \
-    texlive-fonts-extra \
-    texlive-science \
-    texlive-publishers \
-    texlive-bibtex-extra \
-    texlive-lang-chinese \
-    texlive-lang-cjk \
-    texlive-extra-utils \
-    latexmk \
-    fonts-ubuntu \
-    fonts-noto-cjk \
-    fonts-noto-color-emoji \
-    curl \
-    biber \
-    && rm -rf /var/lib/apt/lists/*
+# Prevent timezone prompts and configure TeX Live paths
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    PATH=/usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux:$PATH \
+    TEXMFHOME=/root/texmf
+
+# Install TeX Live from TUG (2025) along with system fonts
+RUN set -eux; \
+    apt-get update && apt-get install -y \
+      perl \
+      wget \
+      xz-utils \
+      fontconfig \
+      ca-certificates \
+      curl \
+      unzip \
+      fonts-ubuntu \
+      fonts-noto-cjk \
+      fonts-noto-color-emoji \
+      && rm -rf /var/lib/apt/lists/*; \
+    mkdir -p /tmp/install-texlive && cd /tmp/install-texlive; \
+    curl -L -o install-tl-unx.tar.gz https://mirrors.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz; \
+    tar -xzf install-tl-unx.tar.gz --strip-components=1; \
+    printf '%s\n' \
+      "selected_scheme scheme-full" \
+      "TEXDIR /usr/local/texlive/${TEXLIVE_YEAR}" \
+      "TEXMFCONFIG /root/.texlive${TEXLIVE_YEAR}/texmf-config" \
+      "TEXMFVAR /root/.texlive${TEXLIVE_YEAR}/texmf-var" \
+      "TEXMFHOME /root/texmf" \
+      "option_doc 0" \
+      "option_src 0" \
+      "option_letter 0" > texlive.profile; \
+    ./install-tl --profile texlive.profile; \
+    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr option repository https://mirrors.ctan.org/systems/texlive/tlnet; \
+    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr update --self --all; \
+    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr install latexmk biber simpleicons fontawesome5 cabin cochineal; \
+    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr path add; \
+    fc-cache -fv; \
+    cd / && rm -rf /tmp/install-texlive
 
 WORKDIR /app
 

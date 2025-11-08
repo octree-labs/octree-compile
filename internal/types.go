@@ -42,6 +42,7 @@ type compileMetadata struct {
 	StderrBytes int       `json:"stderrBytes,omitempty"`
 	LogTail     string    `json:"logTail,omitempty"`
 	Error       string    `json:"error,omitempty"`
+	Engine      string    `json:"engine,omitempty"`
 }
 
 // CompileResult holds the result of a compilation
