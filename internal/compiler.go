@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -451,11 +452,27 @@ func (s *compileSession) prepareWorkspace(cache *CompilationCache) *CompileResul
 		return result
 	}
 
+	s.removeStaleOutputs()
+
 	s.metadata.Status = "written"
 	s.compiler.persistMetadata(s.metadata)
 	log.Printf("[%s] TeX content written to: %s", s.compiler.RequestID, s.texFilePath)
 
 	return nil
+}
+
+func (s *compileSession) removeStaleOutputs() {
+	if s.pdfPath != "" {
+		if err := os.Remove(s.pdfPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("[%s] Warning: failed to remove stale PDF %s: %v", s.compiler.RequestID, s.pdfPath, err)
+		}
+	}
+
+	if s.logPath != "" {
+		if err := os.Remove(s.logPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("[%s] Warning: failed to remove stale log %s: %v", s.compiler.RequestID, s.logPath, err)
+		}
+	}
 }
 
 func (s *compileSession) determineStrategy() (bool, bool) {
