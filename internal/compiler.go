@@ -490,6 +490,8 @@ func (s *compileSession) adjustStrategyForIncremental(needsBib bool, needsMultiP
 		return needsBib, needsMultiPass
 	}
 
+	hasBibliographyConfigured := needsBib || s.bibTool != bibliographyToolNone
+
 	if !changes.HasBibChanges {
 		switch {
 		case !changes.HasTexChanges && changes.HasAssetChanges:
@@ -499,6 +501,11 @@ func (s *compileSession) adjustStrategyForIncremental(needsBib bool, needsMultiP
 			log.Printf("[%s] INCREMENTAL: No changes detected", s.compiler.RequestID)
 			return false, false
 		default:
+			if !hasBibliographyConfigured {
+				log.Printf("[%s] INCREMENTAL: .tex changed without bibliography; single pass", s.compiler.RequestID)
+				return false, needsMultiPass
+			}
+
 			// .tex changed (with/without assets); still run bibliography to refresh citations.
 			log.Printf("[%s] INCREMENTAL: .tex changed with existing bibliography; rerunning bibliography processor", s.compiler.RequestID)
 			return true, needsMultiPass
@@ -506,6 +513,11 @@ func (s *compileSession) adjustStrategyForIncremental(needsBib bool, needsMultiP
 	}
 
 	if !changes.HasTexChanges {
+		if !hasBibliographyConfigured {
+			log.Printf("[%s] INCREMENTAL: Bibliography changes detected but no bibliography configured; single pass", s.compiler.RequestID)
+			return false, needsMultiPass
+		}
+
 		log.Printf("[%s] INCREMENTAL: Only .bib/assets changed (could skip first pdflatex)", s.compiler.RequestID)
 		return true, needsMultiPass
 	}
