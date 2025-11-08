@@ -637,7 +637,7 @@ func (s *compileSession) collectBibliographyTargets(cmdName string) []string {
 		}
 
 		name := entry.Name()
-		if !strings.HasPrefix(name, baseTarget) || !strings.HasSuffix(name, extension) {
+		if !strings.HasSuffix(name, extension) {
 			continue
 		}
 
@@ -646,11 +646,41 @@ func (s *compileSession) collectBibliographyTargets(cmdName string) []string {
 			continue
 		}
 
+		if extension == ".aux" {
+			fullPath := filepath.Join(s.tempDir, name)
+			if !s.auxFileHasBibliography(fullPath) {
+				continue
+			}
+		}
+
 		seen[target] = struct{}{}
 		targets = append(targets, target)
 	}
 
 	return targets
+}
+
+func (s *compileSession) auxFileHasBibliography(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("[%s] Warning: unable to inspect aux file %s: %v", s.compiler.RequestID, path, err)
+		return false
+	}
+
+	content := string(data)
+	markers := []string{
+		"\\bibdata",
+		"\\bibstyle",
+		"\\citation",
+	}
+
+	for _, marker := range markers {
+		if strings.Contains(content, marker) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *compileSession) recordExitCode(err error) {
