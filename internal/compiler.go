@@ -2,6 +2,7 @@ package internal
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -25,6 +26,7 @@ const (
 )
 
 var historyDir string
+var compilationTimeout time.Duration = 2 * time.Minute // Default timeout
 var usepackagePatternCache sync.Map
 
 type latexEngine string
@@ -38,6 +40,11 @@ const (
 // SetHistoryDir sets the directory for compilation history logs
 func SetHistoryDir(dir string) {
 	historyDir = dir
+}
+
+// SetCompilationTimeout sets the timeout for LaTeX compilation commands
+func SetCompilationTimeout(timeout time.Duration) {
+	compilationTimeout = timeout
 }
 
 type Compiler struct {
@@ -597,13 +604,22 @@ func (s *compileSession) runBibliographyProcessor() {
 
 	for _, target := range targets {
 		log.Printf("[%s] Running %s for %s...", s.compiler.RequestID, cmdName, target)
-		cmd := exec.Command(cmdName, target)
+		
+		ctx, cancel := context.WithTimeout(context.Background(), compilationTimeout)
+		defer cancel()
+		
+		cmd := exec.CommandContext(ctx, cmdName, target)
 		cmd.Dir = s.tempDir
 		cmd.Stdout = &s.stdout
 		cmd.Stderr = &s.stderr
 
 		if err := cmd.Run(); err != nil {
-			log.Printf("[%s] %s (%s) exited with error: %v", s.compiler.RequestID, cmdName, target, err)
+			if ctx.Err() == context.DeadlineExceeded {
+				log.Printf("[%s] %s (%s) timed out after %v", s.compiler.RequestID, cmdName, target, compilationTimeout)
+				s.recordExitCode(fmt.Errorf("timeout: %w", err))
+			} else {
+				log.Printf("[%s] %s (%s) exited with error: %v", s.compiler.RequestID, cmdName, target, err)
+			}
 			s.recordExitCode(err)
 			return
 		}
@@ -858,7 +874,11 @@ func (c *Compiler) persistMetadata(metadata *compileMetadata) {
 func (c *Compiler) runLatexEngine(engine latexEngine, tempDir, texFilePath string, stdout, stderr *bytes.Buffer) error {
 	// TODO: Add support for tools like latexmk/makeindex/shell-escape when needed.
 	binary := engine.command()
-	cmd := exec.Command(
+	
+	ctx, cancel := context.WithTimeout(context.Background(), compilationTimeout)
+	defer cancel()
+	
+	cmd := exec.CommandContext(ctx,
 		binary,
 		"-interaction=nonstopmode",
 		"-halt-on-error",
@@ -870,7 +890,12 @@ func (c *Compiler) runLatexEngine(engine latexEngine, tempDir, texFilePath strin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	return cmd.Run()
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		log.Printf("[%s] LaTeX compilation timed out after %v", c.RequestID, compilationTimeout)
+		return fmt.Errorf("compilation timeout after %v: %w", compilationTimeout, err)
+	}
+	return err
 }
 
 func (e latexEngine) command() string {

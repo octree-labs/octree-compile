@@ -16,7 +16,7 @@ import (
 const (
 	DefaultPort           = "3001"
 	MaxConcurrentRequests = 2
-	CompilationTimeout    = 30 * time.Second
+	CompilationTimeout    = 2 * time.Minute // Increased to 2 minutes for complex compilations
 	ShutdownTimeout       = 30 * time.Second
 )
 
@@ -41,6 +41,9 @@ func main() {
 
 	// Set history dir for compiler
 	internal.SetHistoryDir(historyDir)
+	
+	// Set compilation timeout
+	internal.SetCompilationTimeout(CompilationTimeout)
 
 	// Initialize request queue
 	requestQueue = make(chan *internal.CompileJob, MaxConcurrentRequests*2)
@@ -48,7 +51,7 @@ func main() {
 
 	// Start workers
 	for i := 0; i < MaxConcurrentRequests; i++ {
-		go worker(i)
+		go worker(i) // worker pool pattern 
 	}
 
 	// Setup router
@@ -65,9 +68,10 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("LaTeX compilation server starting on port %s", port)
-		log.Printf("Max concurrent requests: %d", MaxConcurrentRequests)
-		log.Printf("Health check: http://localhost:%s/health", port)
+	log.Printf("LaTeX compilation server starting on port %s", port)
+	log.Printf("Max concurrent requests: %d", MaxConcurrentRequests)
+	log.Printf("Compilation timeout: %v", CompilationTimeout)
+	log.Printf("Health check: http://localhost:%s/health", port)
 		
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
@@ -132,4 +136,3 @@ func worker(id int) {
 	}
 	log.Printf("Worker %d stopped", id)
 }
-
