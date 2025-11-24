@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	storage_go "github.com/supabase-community/storage-go"
 )
 
 // truncateText truncates text to the last maxChars characters
@@ -106,13 +108,13 @@ func detectBibliographyTool(mainContent string, files []FileEntry) bibliographyT
 			return bibliographyToolBibtex
 		case strings.Contains(lower, "backend=biber") || strings.Contains(lower, "backend = biber"):
 			seenBiblatex = true
-		case strings.Contains(lower, "\\usepackage{biblatex}") || 
-			(strings.Contains(lower, "\\usepackage[") && strings.Contains(lower, "{biblatex}")) || 
-			strings.Contains(lower, "\\requirepackage{biblatex}") || 
+		case strings.Contains(lower, "\\usepackage{biblatex}") ||
+			(strings.Contains(lower, "\\usepackage[") && strings.Contains(lower, "{biblatex}")) ||
+			strings.Contains(lower, "\\requirepackage{biblatex}") ||
 			(strings.Contains(lower, "\\requirepackage[") && strings.Contains(lower, "{biblatex}")):
 			seenBiblatex = true
-		case strings.Contains(lower, "\\addbibresource") || 
-			strings.Contains(lower, "\\printbibliography") || 
+		case strings.Contains(lower, "\\addbibresource") ||
+			strings.Contains(lower, "\\printbibliography") ||
 			strings.Contains(lower, "\\executebibliographyoptions"):
 			seenBiblatex = true
 		}
@@ -304,4 +306,69 @@ func writeFile(tempDir string, file FileEntry) error {
 	}
 
 	return nil
+}
+
+func FetchFilesFromSupabase(projectID, supabaseURL, supabaseKey string) ([]FileEntry, error) {
+	client := storage_go.NewClient(supabaseURL+"/storage/v1", supabaseKey, nil)
+
+	bucketName := "octree"
+	folderPath := projectID
+
+	result, err := client.ListFiles(bucketName, folderPath, storage_go.FileSearchOptions{
+		Limit: 1000,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list files from Supabase: %v", err)
+	}
+
+	var files []FileEntry
+
+	for _, fileInfo := range result {
+		if fileInfo.Id == "" {
+			continue
+		}
+
+		fileName := fileInfo.Name
+		if fileName == "" {
+			continue
+		}
+
+		fullPath := folderPath + "/" + fileName
+
+		content, err := client.DownloadFile(bucketName, fullPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to download file %s: %v", fullPath, err)
+		}
+
+		fileEntry := FileEntry{
+			Path: fileName,
+		}
+
+		if isBinaryFile(fileName) {
+			fileEntry.Encoding = "base64"
+			fileEntry.Content = base64.StdEncoding.EncodeToString(content)
+		} else {
+			fileEntry.Content = string(content)
+		}
+
+		files = append(files, fileEntry)
+	}
+
+	return files, nil
+}
+
+func isBinaryFile(filename string) bool {
+	binaryExtensions := []string{
+		".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".eps", ".ps",
+		".tif", ".tiff", ".pbm", ".svg", ".ico",
+	}
+
+	lowerName := strings.ToLower(filename)
+	for _, ext := range binaryExtensions {
+		if strings.HasSuffix(lowerName, ext) {
+			return true
+		}
+	}
+
+	return false
 }

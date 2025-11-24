@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,7 +28,6 @@ func HealthHandler(c *gin.Context) {
 
 // CompileHandler handles LaTeX compilation requests
 func CompileHandler(c *gin.Context) {
-	// Parse request
 	var req CompileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -37,19 +37,40 @@ func CompileHandler(c *gin.Context) {
 		return
 	}
 
-	if len(req.Files) == 0 {
+	if req.ProjectID == "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:   "Invalid request",
-			Message: "The files array must contain at least one file",
+			Message: "projectId is required",
 		})
 		return
 	}
 
-	files := req.Files
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	supabaseKey := os.Getenv("SUPABASE_KEY")
 
-	// Log project ID if provided
-	if req.ProjectID != "" {
-		fmt.Printf("Compilation request for project: %s\n", req.ProjectID)
+	if supabaseURL == "" || supabaseKey == "" {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "Configuration error",
+			Message: "Supabase credentials not configured",
+		})
+		return
+	}
+
+	files, err := FetchFilesFromSupabase(req.ProjectID, supabaseURL, supabaseKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "Storage error",
+			Message: fmt.Sprintf("Failed to fetch files from Supabase: %v", err),
+		})
+		return
+	}
+
+	if len(files) == 0 {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "Invalid request",
+			Message: fmt.Sprintf("No files found for project %s in Supabase Storage", req.ProjectID),
+		})
+		return
 	}
 
 	// Check queue capacity

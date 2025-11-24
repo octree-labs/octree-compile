@@ -9,10 +9,9 @@ type FileEntry struct {
 	Encoding string `json:"encoding,omitempty"` // "base64" for binary files, empty for text
 }
 
-// CompileRequest represents the incoming compilation request
 type CompileRequest struct {
-	Files            []FileEntry `json:"files"`
-	ProjectID        string      `json:"projectId,omitempty"`
+	Files            []FileEntry `json:"files,omitempty"`
+	ProjectID        string      `json:"projectId"`
 	LastModifiedFile string      `json:"lastModifiedFile,omitempty"`
 }
 
