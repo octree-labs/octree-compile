@@ -1,7 +1,3 @@
-# Local development docker-compose configuration
-# For staging: use docker-compose.staging.yml
-# For production: use docker-compose.prod.yml
-
 version: '3.8'
 
 services:
@@ -18,16 +14,10 @@ services:
     environment:
       - PORT=3001
       - HISTORY_DIR=/app/logs
-      - GIN_MODE=debug
+      - GIN_MODE=release
     env_file:
       - ../.env
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
@@ -39,4 +29,5 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
 

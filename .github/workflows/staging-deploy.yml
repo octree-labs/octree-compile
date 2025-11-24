@@ -1,0 +1,43 @@
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  staging:
+    name: Run staging-deploy.sh
+    runs-on: ubuntu-latest
+    concurrency:
+      group: staging-deploy
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
+
+      - name: Trust staging host
+        env:
+          STAGING_SERVER_IP: ${{ secrets.STAGING_SERVER_IP }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$STAGING_SERVER_IP" >> ~/.ssh/known_hosts
+
+      - name: Make deploy script executable
+        run: chmod +x deploy/staging-deploy.sh
+
+      - name: Deploy to staging (docker-compose up -d)
+        env:
+          SERVER_IP: ${{ secrets.STAGING_SERVER_IP }}
+        run: ./deploy/staging-deploy.sh
+
