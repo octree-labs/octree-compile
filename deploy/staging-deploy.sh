@@ -1,5 +1,7 @@
 #!/bin/bash
+
 set -e  # Exit on any error
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -7,7 +9,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration (overridable via env vars for CI/CD)
-SERVER_IP="${SERVER_IP:-138.197.13.3}"
+SERVER_IP="${SERVER_IP:-159.65.64.173}"
 SERVER_USER="${SERVER_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/root/octree-compile}"
 SERVICE_NAME="${SERVICE_NAME:-octree-compile}"
@@ -98,17 +100,17 @@ if [ "$DISK_USAGE" -gt 85 ]; then
   df -h /
 fi
 echo "🛑 Stopping existing containers..."
-docker-compose -f deployments/docker-compose.prod.yml down || true
+docker-compose -f deployments/docker-compose.staging.yml down || true
 echo "🏗️  Building Docker image..."
-docker-compose -f deployments/docker-compose.prod.yml build --no-cache
+docker-compose -f deployments/docker-compose.staging.yml build --no-cache
 echo "🚀 Starting services..."
-docker-compose -f deployments/docker-compose.prod.yml up -d
+docker-compose -f deployments/docker-compose.staging.yml up -d
 echo "⏳ Waiting for service to be ready..."
 sleep 5
 echo "✅ Checking service status..."
-docker-compose -f deployments/docker-compose.prod.yml ps
+docker-compose -f deployments/docker-compose.staging.yml ps
 echo "📊 Container logs:"
-docker-compose -f deployments/docker-compose.prod.yml logs --tail=20
+docker-compose -f deployments/docker-compose.staging.yml logs --tail=20
 echo "🧪 Testing health endpoint..."
 curl -s http://localhost:3001/health || echo "Health check failed"
 ENDSSH
@@ -117,7 +119,10 @@ ENDSSH
 echo -e "${YELLOW}🧪 Testing deployment...${NC}"
 sleep 2
 if ssh $SERVER_USER@$SERVER_IP "curl -s http://localhost:3001/health" | grep -q "ok"; then
-@@ -79,16 +139,16 @@ else
+    echo -e "${GREEN}✅ Deployment successful!${NC}"
+    echo -e "${GREEN}Service is running at: http://$SERVER_IP:3001${NC}"
+else
+    echo -e "${RED}❌ Deployment may have issues. Check logs.${NC}"
     exit 1
 fi
 
@@ -127,12 +132,14 @@ echo -e "${GREEN}Deployment Complete!${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
 echo ""
 echo "📝 Useful commands:"
-echo "  View logs:    ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.prod.yml logs -f'"
-echo "  Restart:      ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.prod.yml restart'"
-echo "  Stop:         ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.prod.yml down'"
-echo "  Shell access: ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.prod.yml exec latex-compile /bin/sh'"
+echo "  View logs:    ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.staging.yml logs -f'"
+echo "  Restart:      ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.staging.yml restart'"
+echo "  Stop:         ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.staging.yml down'"
+echo "  Shell access: ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker-compose -f deployments/docker-compose.staging.yml exec latex-compile /bin/sh'"
 echo ""
 echo "🌐 API Endpoints:"
 echo "  Health: http://$SERVER_IP:3001/health"
 echo "  Compile: http://$SERVER_IP:3001/compile"
 echo ""
+
+39 changes: 39 additions & 0 deletions
