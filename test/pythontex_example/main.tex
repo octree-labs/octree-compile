@@ -1,0 +1,17 @@
+\documentclass{article}
+\usepackage{pythontex}
+
+\begin{document}
+
+\section*{Python\TeX Demo}
+
+The value of $\int_0^1 x^2 \, dx$ computed by embedded Python is:
+
+\begin{pycode}
+from fractions import Fraction
+result = Fraction(1, 3)
+print(r"\[ \int_0^1 x^2 \, dx = \frac{%d}{%d} \]" % (result.numerator, result.denominator))
+\end{pycode}
+
+\end{document}
+

@@ -51,28 +51,30 @@ func New() *Compiler {
 }
 
 type compileSession struct {
-	compiler      *Compiler
-	files         []FileEntry
-	projectID     string
-	enqueuedAt    time.Time
-	receivedAt    time.Time
-	queueMs       int64
-	mainContent   string
-	mainFilePath  string
-	jobName       string
-	tempDir       string
-	texFilePath   string
-	pdfPath       string
-	logPath       string
-	fileChanges   *FileChanges
-	isIncremental bool
-	shouldCleanup bool
-	metadata      *compileMetadata
-	stdout        bytes.Buffer
-	stderr        bytes.Buffer
-	exitCode      int
-	bibTool       bibliographyTool
-	engine        latexEngine
+	compiler            *Compiler
+	files               []FileEntry
+	projectID           string
+	enqueuedAt          time.Time
+	receivedAt          time.Time
+	queueMs             int64
+	mainContent         string
+	mainFilePath        string
+	jobName             string
+	tempDir             string
+	texFilePath         string
+	pdfPath             string
+	logPath             string
+	fileChanges         *FileChanges
+	isIncremental       bool
+	shouldCleanup       bool
+	metadata            *compileMetadata
+	requiresShellEscape bool
+	requiresPythonTex   bool
+	stdout              bytes.Buffer
+	stderr              bytes.Buffer
+	exitCode            int
+	bibTool             bibliographyTool
+	engine              latexEngine
 }
 
 func newCompileSession(compiler *Compiler, files []FileEntry, enqueuedAt time.Time, projectID string) *compileSession {
@@ -140,6 +142,16 @@ func (s *compileSession) logInitialDetails() {
 	preview := s.mainContent[:min(120, len(s.mainContent))]
 	preview = strings.ReplaceAll(preview, "\n", " ")
 	log.Printf("[%s] TeX preview: %s...", s.compiler.RequestID, preview)
+
+	if requiresShellEscape(s.mainContent, s.files) {
+		s.requiresShellEscape = true
+		log.Printf("[%s] Shell escape enabled (detected minted/pythontex usage)", s.compiler.RequestID)
+	}
+
+	if usesPythonTex(s.mainContent, s.files) {
+		s.requiresPythonTex = true
+		log.Printf("[%s] PythonTeX detected; pythontex helper will run between passes", s.compiler.RequestID)
+	}
 
 	engine, reason := s.detectEngine()
 	s.engine = engine
@@ -551,11 +563,19 @@ func (s *compileSession) runCompilation(needsBib, needsMultiPass bool) {
 		s.recordExitCode(s.runLatexPass())
 
 		if s.exitCode == 0 {
+			s.runPythonTexIfNeeded()
+		}
+
+		if s.exitCode == 0 {
 			s.runBibliographyProcessor()
 
 			if s.exitCode == 0 {
 				log.Printf("[%s] Running pdflatex (pass 2/3)...", s.compiler.RequestID)
 				s.recordExitCode(s.runLatexPass())
+
+				if s.exitCode == 0 {
+					s.runPythonTexIfNeeded()
+				}
 
 				if s.exitCode == 0 {
 					log.Printf("[%s] Running pdflatex (pass 3/3)...", s.compiler.RequestID)
@@ -569,17 +589,29 @@ func (s *compileSession) runCompilation(needsBib, needsMultiPass bool) {
 		s.recordExitCode(s.runLatexPass())
 
 		if s.exitCode == 0 {
+			s.runPythonTexIfNeeded()
+		}
+
+		if s.exitCode == 0 {
 			log.Printf("[%s] Running pdflatex (pass 2/2)...", s.compiler.RequestID)
 			s.recordExitCode(s.runLatexPass())
 		}
 	} else {
 		log.Printf("[%s] Running single-pass compilation", s.compiler.RequestID)
 		s.recordExitCode(s.runLatexPass())
+
+		if s.exitCode == 0 && s.requiresPythonTex {
+			s.runPythonTexIfNeeded()
+			if s.exitCode == 0 {
+				log.Printf("[%s] PythonTeX requires a final LaTeX pass; running pdflatex (pass 2/2)...", s.compiler.RequestID)
+				s.recordExitCode(s.runLatexPass())
+			}
+		}
 	}
 }
 
 func (s *compileSession) runLatexPass() error {
-	return s.compiler.runLatexEngine(s.engine, s.tempDir, s.texFilePath, &s.stdout, &s.stderr)
+	return s.compiler.runLatexEngine(s.engine, s.tempDir, s.texFilePath, s.requiresShellEscape, &s.stdout, &s.stderr)
 }
 
 func (s *compileSession) runBibliographyProcessor() {
@@ -604,6 +636,25 @@ func (s *compileSession) runBibliographyProcessor() {
 		s.recordExitCode(err)
 	} else {
 		log.Printf("[%s] %s completed successfully", s.compiler.RequestID, cmdName)
+	}
+}
+
+func (s *compileSession) runPythonTexIfNeeded() {
+	if !s.requiresPythonTex || s.exitCode != 0 {
+		return
+	}
+
+	log.Printf("[%s] Running pythontex helper...", s.compiler.RequestID)
+	cmd := exec.Command("pythontex", filepath.Base(s.texFilePath))
+	cmd.Dir = s.tempDir
+	cmd.Stdout = &s.stdout
+	cmd.Stderr = &s.stderr
+
+	if err := cmd.Run(); err != nil {
+		log.Printf("[%s] pythontex exited with error: %v", s.compiler.RequestID, err)
+		s.recordExitCode(err)
+	} else {
+		log.Printf("[%s] pythontex completed successfully", s.compiler.RequestID)
 	}
 }
 
@@ -779,17 +830,21 @@ func (c *Compiler) persistMetadata(metadata *compileMetadata) {
 }
 
 // runLatexEngine runs a single LaTeX pass with the selected engine.
-func (c *Compiler) runLatexEngine(engine latexEngine, tempDir, texFilePath string, stdout, stderr *bytes.Buffer) error {
+func (c *Compiler) runLatexEngine(engine latexEngine, tempDir, texFilePath string, shellEscape bool, stdout, stderr *bytes.Buffer) error {
 	// TODO: Add support for tools like latexmk/makeindex/shell-escape when needed.
 	binary := engine.command()
-	cmd := exec.Command(
-		binary,
+	args := []string{
 		"-interaction=nonstopmode",
 		"-halt-on-error",
 		"-file-line-error",
 		fmt.Sprintf("-output-directory=%s", tempDir),
-		texFilePath,
-	)
+	}
+	if shellEscape {
+		args = append(args, "-shell-escape")
+	}
+	args = append(args, texFilePath)
+
+	cmd := exec.Command(binary, args...)
 	cmd.Dir = tempDir
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

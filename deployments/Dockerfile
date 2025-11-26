@@ -29,6 +29,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TEXMFHOME=/root/texmf
 
 # Install TeX Live from TUG (2025) along with system fonts
+ARG CTAN_MIRROR=https://mirror.ctan.org
+ENV TEXLIVE_INSTALL_ENV_NOCHECK=1
+
 RUN set -eux; \
     apt-get update && apt-get install -y \
       perl \
@@ -41,9 +44,15 @@ RUN set -eux; \
       fonts-ubuntu \
       fonts-noto-cjk \
       fonts-noto-color-emoji \
+      fonts-arphic-ukai \
+      fonts-arphic-uming \
+      python3 \
+      python3-pygments \
+      ghostscript \
+      imagemagick \
       && rm -rf /var/lib/apt/lists/*; \
     mkdir -p /tmp/install-texlive && cd /tmp/install-texlive; \
-    curl -L -o install-tl-unx.tar.gz https://mirrors.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz; \
+    curl -fL -o install-tl-unx.tar.gz ${CTAN_MIRROR}/systems/texlive/tlnet/install-tl-unx.tar.gz; \
     tar -xzf install-tl-unx.tar.gz --strip-components=1; \
     printf '%s\n' \
       "selected_scheme scheme-full" \
@@ -54,9 +63,9 @@ RUN set -eux; \
       "option_doc 0" \
       "option_src 0" \
       "option_letter 0" > texlive.profile; \
-    ./install-tl --profile texlive.profile; \
-    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr option repository https://mirrors.ctan.org/systems/texlive/tlnet; \
-    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr update --self --all; \
+    ./install-tl --profile texlive.profile --repository ${CTAN_MIRROR}/systems/texlive/tlnet; \
+    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr option repository ${CTAN_MIRROR}/systems/texlive/tlnet; \
+    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr update --self --all || true; \
     /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr install \
       latexmk \
       biber \
@@ -67,9 +76,31 @@ RUN set -eux; \
       fontawesome5 \
       cabin \
       cochineal \
-      arphic; \
+      arphic \
+      arphic-ttf \
+      fontawesome \
+      academicons \
+      simpleline \
+      newpx \
+      newtx \
+      ebgaramond \
+      sourceserifpro \
+      sourcesanspro \
+      sourcecodepro \
+      roboto \
+      firasans \
+      xits \
+      stix2-otf \
+      stix2-type1 \
+      sourcehan-serif \
+      sourcehan-sans \
+      noto \
+      noto-type1 \
+      minted \
+      pgfplots || true; \
     /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr path add; \
-    fc-cache -fv; \
+        fc-cache -fv; \
+        /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/luaotfload-tool -u || true; \
     cd / && rm -rf /tmp/install-texlive
 
 WORKDIR /app

@@ -106,13 +106,13 @@ func detectBibliographyTool(mainContent string, files []FileEntry) bibliographyT
 			return bibliographyToolBibtex
 		case strings.Contains(lower, "backend=biber") || strings.Contains(lower, "backend = biber"):
 			seenBiblatex = true
-		case strings.Contains(lower, "\\usepackage{biblatex}") || 
-			(strings.Contains(lower, "\\usepackage[") && strings.Contains(lower, "{biblatex}")) || 
-			strings.Contains(lower, "\\requirepackage{biblatex}") || 
+		case strings.Contains(lower, "\\usepackage{biblatex}") ||
+			(strings.Contains(lower, "\\usepackage[") && strings.Contains(lower, "{biblatex}")) ||
+			strings.Contains(lower, "\\requirepackage{biblatex}") ||
 			(strings.Contains(lower, "\\requirepackage[") && strings.Contains(lower, "{biblatex}")):
 			seenBiblatex = true
-		case strings.Contains(lower, "\\addbibresource") || 
-			strings.Contains(lower, "\\printbibliography") || 
+		case strings.Contains(lower, "\\addbibresource") ||
+			strings.Contains(lower, "\\printbibliography") ||
 			strings.Contains(lower, "\\executebibliographyoptions"):
 			seenBiblatex = true
 		}
@@ -248,6 +248,88 @@ func buildFileHashMap(files []FileEntry) map[string]string {
 		hashes[file.Path] = HashFileContent(file.Content)
 	}
 	return hashes
+}
+
+// requiresShellEscape inspects TeX content to see if dangerous packages (minted, pythontex, etc.)
+// are used and therefore need -shell-escape.
+func requiresShellEscape(mainContent string, files []FileEntry) bool {
+	triggers := []string{
+		`\usepackage{minted}`,
+		`\usepackage[`,
+		`\begin{minted`,
+		`\inputminted`,
+		`\usepackage{pythontex}`,
+		`\begin{python}`,
+		`\begin{pycode}`,
+		`\py{`,
+		`\pyc{`,
+		`\usepackage{gnuplottex}`,
+		`\begin{gnuplot}`,
+		`\usepackage{asymptote}`,
+		`\begin{asy}`,
+	}
+
+	if containsTrigger(mainContent, triggers) {
+		return true
+	}
+
+	for _, file := range files {
+		if file.Encoding == "base64" {
+			continue
+		}
+		if containsTrigger(file.Content, triggers) {
+			return true
+		}
+	}
+	return false
+}
+
+// usesPythonTex determines whether the document relies on the pythontex package.
+func usesPythonTex(mainContent string, files []FileEntry) bool {
+	triggers := []string{
+		`\usepackage{pythontex}`,
+		`\begin{python}`,
+		`\begin{pycode}`,
+		`\begin{pyblock}`,
+		`\py{`,
+		`\pyc{`,
+		`\pycode`,
+	}
+
+	if containsTrigger(mainContent, triggers) {
+		return true
+	}
+
+	for _, file := range files {
+		if file.Encoding == "base64" {
+			continue
+		}
+		if containsTrigger(file.Content, triggers) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsTrigger(content string, triggers []string) bool {
+	if content == "" {
+		return false
+	}
+	lower := strings.ToLower(content)
+	for _, trigger := range triggers {
+		if strings.Contains(lower, strings.ToLower(trigger)) {
+			// special-case \usepackage[, ensure minted etc.
+			if trigger == `\\usepackage[` {
+				if strings.Contains(lower, "minted") || strings.Contains(lower, "pythontex") || strings.Contains(lower, "gnuplottex") || strings.Contains(lower, "asymptote") {
+					return true
+				}
+				continue
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // updateCachedFiles writes only changed files to the temp directory

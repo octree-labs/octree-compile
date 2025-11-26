@@ -1,0 +1,21 @@
+\documentclass{article}
+\usepackage{minted}
+
+\begin{document}
+
+\section*{Minted Demo}
+
+Below is a Python code listing rendered via \texttt{minted}. Compiling this
+document requires \texttt{-shell-escape} so the service must detect it
+automatically.
+
+\begin{minted}[fontsize=\small]{python}
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+
+for person in ["Ada", "Grace", "Linus"]:
+    print(greet(person))
+\end{minted}
+
+\end{document}
+
