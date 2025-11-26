@@ -1,0 +1,120 @@
+%TEMPLATE TO GENERATE PDF EASY READABLE ON 6'' EBOOK-READER
+%article=mwart;book=mwbk;report=mwrep
+%\documentclass[10pt,oneside]{mwbk} %polish style
+\documentclass[10pt,oneside]{article} %international style
+
+%adjusting for 6inch diagonal display
+\usepackage[paperwidth=9cm, paperheight=11.5cm, top=0.1cm, left=0.1cm, right=0.1cm, bottom=0.2cm]{geometry}
+
+% other packages (put here what you need)
+%\usepackage{polski} % polish package 
+\usepackage[utf8]{inputenc} % universal codepage
+\usepackage{graphicx} % images
+\usepackage[bookmarks=true,colorlinks=true]{hyperref} % hyperlinks
+\usepackage{calc} % position calculation
+\usepackage{amsmath} % math symbols
+%\usepackage{longtable} % dla dlugich tabel
+%\usepackage{multirow} % pomoc do tabel
+
+%FONTS my proposal is TeXGyre
+%\usepackage{tgtermes} %times like
+%\usepackage{tgcursor} %courier like
+%\usepackage{tgschola} %schoolbook like
+%\usepackage{tgpagella} %palatin like
+%\usepackage{tgchorus} %itc zapf chancery like
+\usepackage{tgbonum} %bookman like
+%\usepackage{tgheros} %helvetica like
+%\usepackage{tgadventor} %avant garde gothic like
+
+
+%IN ADDITION
+% on such a small "page", we have to let LaTeX to be a bit sloppy
+\frenchspacing % no English paragraphs, but much more frugal
+\sloppy % necessary in such a small page format
+\widowpenalty=10000 % no widows
+
+
+%LET'S BEGIN
+
+\pagestyle{empty} % no page numbers etc.
+
+%---------
+%AUTHOR & TITLE---
+\author{Name Surname}
+\title{Something Interesting To Read}
+%\date{\today}
+
+
+
+%-------------------
+%ADDITIONAL INFO FOR PDF
+%INFO DLA PDF
+\pdfinfo {
+/Author (\author)
+/Subject (ebook,)
+/Title (\title)
+/Creator (TexLive&Linux)
+/Producer (pdflatex)
+/CreationDate (D:20121212121212)
+%/ModDate (D:\pdfdate)
+/Keywords (ebook;6inches)
+}
+
+
+
+
+\begin{document}
+
+
+%-- CREATE HERE A TITLE PAGE AS YOU LIKE. My proposal is:
+
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
+\begin{titlepage}
+\begin{center}
+
+\HRule \\[0.3cm]
+% author
+\textsc{\Large Whooknows Authah} \\[0.3cm]
+\includegraphics[width=8.5cm]{img/coverimg.jpg} \\[0.3cm]
+% title
+{ \Huge \bfseries Something Interesting To Read} \\%[0.1cm]
+\HRule \\[0.3cm]
+
+% Optionally translator and publishing house
+% The Translator
+\begin{minipage}{0.4\textwidth}
+\begin{flushleft} \small
+\emph{Translated by:}\\
+Good Translator %here the translator name surname
+\end{flushleft}
+\end{minipage}
+% Publishing House
+\begin{minipage}{0.4\textwidth}
+\begin{flushright} \small
+\emph{Published by:} \\
+\textsc{Publishing House} % here the publishing house
+\end{flushright}
+\end{minipage}
+
+\end{center}
+\end{titlepage}
+
+
+
+%%%--- SIMPLE TITLEPAGE
+%\maketitle %thispagestyle{empty} % optional simple titlepage
+%\clearpage
+%\setcounter{tocdepth}{6} % depth of TOC
+
+%--- TOC
+\tableofcontents
+
+
+%%%--- WRITE HERE OR PASTE HERE, OR INPUT HERE, OR...
+\input{notes.tex}
+
+\input{lorem.tex}
+
+
+
+\end{document}

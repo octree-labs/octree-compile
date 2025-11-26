@@ -1,0 +1,76 @@
+\documentclass[letter,12pt]{article}
+\usepackage{graphicx}
+\begin{document}
+\noindent\bf{\huge Chapter 1}\\
+\bf{\huge Introduction}\\
+\includegraphics[]{unixlogo.jpeg}\\
+\bf{\LARGE 1.1 Operating Systems}\\
+\bf{\Large 1.1.1 Linux}
+\begin{itemize}
+\item [$ \theta $]Linux is based on Unix
+\begin{itemize}
+\item [$ \omega $]Unix Philosophy
+\item [$ \omega $]Unix Commands
+\item [$ \omega $]Unix Standards and Conventions
+\end{itemize}
+\end{itemize}
+\bf{\Large 1.1.2 Unix}
+\begin{itemize}
+\item [$ \theta $]There is some variation between Unix OS
+\begin{itemize}
+\item [$ \omega $]Especially regarding system administration
+\item [$ \omega $]Often Linux-specific things in these areas
+\end{itemize}
+\end{itemize}
+\pagebreak
+\begin{itemize}
+\item [$ 2 $]\hspace{20mm}\hspace{20mm}\hspace{10mm} CHAPTER 1. INTRODUCTION\\
+\end{itemize}
+\noindent\bf{\Large 1.2 Unix System Architecture}\\
+\includegraphics[width=3in,]{unixkernel__2__fw.png}\\
+\begin{itemize}
+\item [$ \theta $]The shell and the window environment are programs
+\item [$ \theta $]Programs’ only access to hardware is via the kernel
+\end{itemize}
+\bf{\Large 1.3 Tables}\\
+Tables are a little more difficult. TeX automatically calculates the width of the columns.\\
+\begin{center}
+\begin{tabular}{ |l|l|l|l| } 
+ \hline
+ lattice & d & q & Tmf/T\\
+ \hline
+ square & 2 & 4 & 1.763\\
+ \hline
+ triangular & 2 & 6 & 1.648\\
+ \hline
+ diamond & 3 & 4 & 1.479\\
+ \hline
+ simple cubic & 3 & 6 & 1.330\\
+ \hline
+ bcc & 3 & 8 & 1.260\\
+ \hline
+ fcc & 3 & 12 & 1.225\\
+ \hline
+\end{tabular}
+\par \small Table 1.1: A Sample Table
+\end{center}
+\pagebreak
+\noindent\bf{\Large Chapter 2}\\
+\bf{\huge Formulas and Equations}\\
+\bf{\Large 2.1 Aligning Equations}\\
+Follow these steps to be able to align equations:
+\begin{enumerate}
+\item In the preamble, include the package \bf{amsmath}
+\item In the code, use \bf{begin} \{{ align }\} and \bf{end} \{{ align }\}
+\item Within the align clause, append the \& before the = to align the equal signs
+\begin{center}
+a = b\hspace{20mm}\hspace{20mm}(2.1)\\
+a = d\hspace{20mm}\hspace{20mm}(2.2)\\
+a = c\hspace{20mm}\hspace{20mm}(2.3)\\
+\end{center}
+\end{enumerate}
+\bf{\Large 2.2 Some Formulas}\\
+\begin{center}
+$$\frac{d}{dx}  (\int_{o}^{x}f(u)du) = f(x)$$
+\end{center}
+\end{document}

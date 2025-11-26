@@ -57,7 +57,17 @@ RUN set -eux; \
     ./install-tl --profile texlive.profile; \
     /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr option repository https://mirrors.ctan.org/systems/texlive/tlnet; \
     /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr update --self --all; \
-    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr install latexmk biber simpleicons fontawesome5 cabin cochineal; \
+    /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr install \
+      latexmk \
+      biber \
+      fontspec \
+      unicode-math \
+      libertine \
+      simpleicons \
+      fontawesome5 \
+      cabin \
+      cochineal \
+      arphic; \
     /usr/local/texlive/${TEXLIVE_YEAR}/bin/x86_64-linux/tlmgr path add; \
     fc-cache -fv; \
     cd / && rm -rf /tmp/install-texlive
