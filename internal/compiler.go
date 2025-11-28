@@ -557,105 +557,67 @@ func (s *compileSession) adjustStrategyForIncremental(needsBib bool, needsMultiP
 func (s *compileSession) runCompilation(needsBib, needsMultiPass bool) {
 	s.exitCode = 0
 
-	if needsBib {
-		log.Printf("[%s] Running full bibliography pipeline using %s", s.compiler.RequestID, s.bibTool.String())
+	log.Printf("[%s] Delegating compilation to latexmk (bib=%v, multi-pass=%v, pythontex=%v)",
+		s.compiler.RequestID, needsBib, needsMultiPass, s.requiresPythonTex)
 
-		s.recordExitCode(s.runLatexPass())
+	s.recordExitCode(s.runLatexmk("initial"))
 
+	if s.exitCode == 0 && s.requiresPythonTex {
+		s.recordExitCode(s.runPythonTex())
 		if s.exitCode == 0 {
-			s.runPythonTexIfNeeded()
-		}
-
-		if s.exitCode == 0 {
-			s.runBibliographyProcessor()
-
-			if s.exitCode == 0 {
-				log.Printf("[%s] Running pdflatex (pass 2/3)...", s.compiler.RequestID)
-				s.recordExitCode(s.runLatexPass())
-
-				if s.exitCode == 0 {
-					s.runPythonTexIfNeeded()
-				}
-
-				if s.exitCode == 0 {
-					log.Printf("[%s] Running pdflatex (pass 3/3)...", s.compiler.RequestID)
-					s.recordExitCode(s.runLatexPass())
-				}
-			}
-		}
-	} else if needsMultiPass {
-		log.Printf("[%s] Running two-pass compilation for cross-references", s.compiler.RequestID)
-
-		s.recordExitCode(s.runLatexPass())
-
-		if s.exitCode == 0 {
-			s.runPythonTexIfNeeded()
-		}
-
-		if s.exitCode == 0 {
-			log.Printf("[%s] Running pdflatex (pass 2/2)...", s.compiler.RequestID)
-			s.recordExitCode(s.runLatexPass())
-		}
-	} else {
-		log.Printf("[%s] Running single-pass compilation", s.compiler.RequestID)
-		s.recordExitCode(s.runLatexPass())
-
-		if s.exitCode == 0 && s.requiresPythonTex {
-			s.runPythonTexIfNeeded()
-			if s.exitCode == 0 {
-				log.Printf("[%s] PythonTeX requires a final LaTeX pass; running pdflatex (pass 2/2)...", s.compiler.RequestID)
-				s.recordExitCode(s.runLatexPass())
-			}
+			s.recordExitCode(s.runLatexmk("post-pythontex"))
 		}
 	}
 }
 
-func (s *compileSession) runLatexPass() error {
-	return s.compiler.runLatexEngine(s.engine, s.tempDir, s.texFilePath, s.requiresShellEscape, &s.stdout, &s.stderr)
-}
+func (s *compileSession) runLatexmk(stage string) error {
+	log.Printf("[%s] Running latexmk (%s)", s.compiler.RequestID, stage)
 
-func (s *compileSession) runBibliographyProcessor() {
-	cmdName := "bibtex"
-	switch s.bibTool {
-	case bibliographyToolBiber:
-		cmdName = "biber"
-	case bibliographyToolBibtex:
-		cmdName = "bibtex"
-	default:
-		cmdName = "bibtex"
+	engineOpts := []string{
+		"-interaction=nonstopmode",
+		"-halt-on-error",
+		"-file-line-error",
+	}
+	if s.requiresShellEscape {
+		engineOpts = append(engineOpts, "-shell-escape")
+	}
+	latexCommand := fmt.Sprintf("%s %s %%O %%S", s.engine.command(), strings.Join(engineOpts, " "))
+
+	args := []string{
+		"-silent",
+		"-f",
+		"-pdf",
+		"-pdflatex=" + latexCommand,
 	}
 
-	log.Printf("[%s] Running %s...", s.compiler.RequestID, cmdName)
-	cmd := exec.Command(cmdName, s.jobName)
-	cmd.Dir = s.tempDir
+	cmd := exec.Command("latexmk", append(args, filepath.Base(s.texFilePath))...)
+	cmd.Dir = filepath.Dir(s.texFilePath)
 	cmd.Stdout = &s.stdout
 	cmd.Stderr = &s.stderr
 
-	if err := cmd.Run(); err != nil {
-		log.Printf("[%s] %s exited with error: %v", s.compiler.RequestID, cmdName, err)
-		s.recordExitCode(err)
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("[%s] latexmk (%s) exited with error: %v", s.compiler.RequestID, stage, err)
 	} else {
-		log.Printf("[%s] %s completed successfully", s.compiler.RequestID, cmdName)
+		log.Printf("[%s] latexmk (%s) completed successfully", s.compiler.RequestID, stage)
 	}
+	return err
 }
 
-func (s *compileSession) runPythonTexIfNeeded() {
-	if !s.requiresPythonTex || s.exitCode != 0 {
-		return
-	}
-
+func (s *compileSession) runPythonTex() error {
 	log.Printf("[%s] Running pythontex helper...", s.compiler.RequestID)
 	cmd := exec.Command("pythontex", filepath.Base(s.texFilePath))
 	cmd.Dir = s.tempDir
 	cmd.Stdout = &s.stdout
 	cmd.Stderr = &s.stderr
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	if err != nil {
 		log.Printf("[%s] pythontex exited with error: %v", s.compiler.RequestID, err)
-		s.recordExitCode(err)
 	} else {
 		log.Printf("[%s] pythontex completed successfully", s.compiler.RequestID)
 	}
+	return err
 }
 
 func (s *compileSession) recordExitCode(err error) {
@@ -827,29 +789,6 @@ func (c *Compiler) persistMetadata(metadata *compileMetadata) {
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		log.Printf("[%s] Failed to persist metadata: %v", c.RequestID, err)
 	}
-}
-
-// runLatexEngine runs a single LaTeX pass with the selected engine.
-func (c *Compiler) runLatexEngine(engine latexEngine, tempDir, texFilePath string, shellEscape bool, stdout, stderr *bytes.Buffer) error {
-	// TODO: Add support for tools like latexmk/makeindex/shell-escape when needed.
-	binary := engine.command()
-	args := []string{
-		"-interaction=nonstopmode",
-		"-halt-on-error",
-		"-file-line-error",
-		fmt.Sprintf("-output-directory=%s", tempDir),
-	}
-	if shellEscape {
-		args = append(args, "-shell-escape")
-	}
-	args = append(args, texFilePath)
-
-	cmd := exec.Command(binary, args...)
-	cmd.Dir = tempDir
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-
-	return cmd.Run()
 }
 
 func (e latexEngine) command() string {

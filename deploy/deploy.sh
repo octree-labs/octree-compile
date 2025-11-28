@@ -12,6 +12,8 @@ SERVER_USER="${SERVER_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/root/octree-compile}"
 SERVICE_NAME="${SERVICE_NAME:-octree-compile}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-octree-compile:latest}"
+FONT_BASE_IMAGE="${FONT_BASE_IMAGE:-octree/latex-fonts:2025}"
+TEXLIVE_BASE_IMAGE="${TEXLIVE_BASE_IMAGE:-octree/texlive-runtime:2025}"
 
 echo -e "${GREEN}🚀 Starting deployment to $SERVER_IP${NC}"
 
@@ -83,9 +85,19 @@ rsync -avz --delete \
 
 # Step 3: Deploy on server
 echo -e "${YELLOW}🔧 Deploying on server...${NC}"
-ssh $SERVER_USER@$SERVER_IP << 'ENDSSH'
+ssh $SERVER_USER@$SERVER_IP "FONT_BASE_IMAGE='$FONT_BASE_IMAGE' TEXLIVE_BASE_IMAGE='$TEXLIVE_BASE_IMAGE' bash -s" <<'ENDSSH'
 set -e
 cd /root/octree-compile
+echo "🎨 Ensuring font base image: $FONT_BASE_IMAGE"
+if ! docker image inspect "$FONT_BASE_IMAGE" >/dev/null 2>&1; then
+  echo "🧱 Building font base image $FONT_BASE_IMAGE..."
+  docker build -f deployments/Dockerfile.fonts-base -t "$FONT_BASE_IMAGE" .
+fi
+echo "📚 Ensuring TeX Live base image: $TEXLIVE_BASE_IMAGE"
+if ! docker image inspect "$TEXLIVE_BASE_IMAGE" >/dev/null 2>&1; then
+  echo "🧱 Building TeX Live base image $TEXLIVE_BASE_IMAGE..."
+  docker build -f deployments/Dockerfile.texlive-base --build-arg FONT_BASE_IMAGE="$FONT_BASE_IMAGE" -t "$TEXLIVE_BASE_IMAGE" .
+fi
 echo "🧹 Checking disk space..."
 DISK_USAGE=$(df --output=pcent / | tail -1 | tr -dc '0-9')
 echo "Current root filesystem usage: ${DISK_USAGE}%"
@@ -100,6 +112,7 @@ fi
 echo "🛑 Stopping existing containers..."
 docker-compose -f deployments/docker-compose.prod.yml down || true
 echo "🏗️  Building Docker image..."
+export TEXLIVE_BASE_IMAGE
 docker-compose -f deployments/docker-compose.prod.yml build --no-cache
 echo "🚀 Starting services..."
 docker-compose -f deployments/docker-compose.prod.yml up -d

@@ -5,6 +5,8 @@ services:
     build:
       context: ..
       dockerfile: deployments/Dockerfile
+      args:
+        TEXLIVE_BASE_IMAGE: ${TEXLIVE_BASE_IMAGE:-octree/texlive-runtime:2025}
     image: octree/latex-compile:latest
     container_name: latex-compile
     ports:

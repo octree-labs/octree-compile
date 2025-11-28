@@ -16,6 +16,7 @@ BINARY_EXTENSIONS = {
     ".eps", ".ps", ".pbm", ".pgm", ".ppm", ".pnm",
     ".ico", ".svg", ".svgz",
     ".zip", ".tar", ".gz", ".bz2",
+    ".ttf", ".otf", ".otc", ".woff", ".woff2",
 }
 
 

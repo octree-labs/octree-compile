@@ -7,6 +7,7 @@ A high-performance LaTeX compilation service written in Go, featuring intelligen
 - **Intelligent Caching**: Content-based hashing for instant cache hits
 - **Incremental Compilation**: 30-40% faster recompilation when only text changes
 - **Smart Compilation**: Skips unnecessary steps (e.g., bibtex when `.bib` unchanged)
+- **latexmk Orchestration**: Delegates multi-pass, bibliography, and shell-escape flows to `latexmk` for maximum compatibility
 - **Concurrent Safety**: Project-level locking prevents race conditions
 - **Memory Management**: Automatic cache eviction (30min timeout + LRU)
 - **Production Ready**: Tested with 260+ test cases, 100% success rate
@@ -21,7 +22,7 @@ A high-performance LaTeX compilation service written in Go, featuring intelligen
 ## Prerequisites
 
 - **Go**: 1.21 or higher
-- **LaTeX**: Full TeX Live distribution
+- **LaTeX**: Full TeX Live distribution (includes `latexmk`, `pythontex`, and the required auxiliary tools)
   - macOS: `brew install --cask mactex`
   - Ubuntu: `sudo apt-get install texlive-full`
 - **Make**: For build automation
@@ -225,8 +226,15 @@ make test           # Run Go tests (if any)
 4. **File Diffing**: Detects exactly what changed (added/modified/deleted)
 5. **Smart Compilation**:
    - Only `.tex` changed → Skip bibtex (reuse `.bbl`)
-   - Only assets changed → Single pdflatex pass
-   - Only `.bib` changed → Full pipeline (future optimization possible)
+   - Only assets changed → Single `latexmk` pass
+   - Only `.bib` changed → `latexmk` reruns the bibliography tool automatically
+
+### Compilation Pipeline
+
+1. **Engine Detection** – Chooses pdfLaTeX, XeLaTeX, or LuaLaTeX based on packages (`fontspec`, `\directlua`, etc.).
+2. **Shell-Escape & PythonTeX Detection** – Automatically toggles `-shell-escape` and schedules `pythontex` when required (e.g., `minted`, `pythontex`).
+3. **latexmk Execution** – A single `latexmk` invocation handles all LaTeX passes, bibliography tools, and auxiliary rebuilds inside the per-project temp directory.
+4. **PythonTeX Finalization** – When a project uses PythonTeX, the service runs `pythontex` and triggers one more `latexmk` pass to embed the generated code output.
 
 ### Cache Eviction
 
@@ -268,6 +276,18 @@ lsof -ti:3001 | xargs kill -9
 Ensure LaTeX binaries are in PATH:
 ```bash
 export PATH="/Library/TeX/texbin:$PATH"  # macOS
+```
+
+### Missing Chinese Fonts (e.g., `AR PL KaitiM GB`) or Times New Roman
+
+Projects that rely on `ctex` or other Chinese typesetting packages need Kai-style
+fonts, and many templates explicitly request `Times New Roman`. The Docker image
+now installs both `fonts-arphic-gkai00mp` and `ttf-mscorefonts-installer`, but
+you must rebuild the container for the change to take effect:
+
+```bash
+docker compose build --no-cache latex-compile
+docker compose up -d latex-compile
 ```
 
 ### Permission Denied (Temp Files)
