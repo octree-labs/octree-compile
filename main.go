@@ -68,7 +68,6 @@ func main() {
 		log.Printf("LaTeX compilation server starting on port %s", port)
 		log.Printf("Max concurrent requests: %d", MaxConcurrentRequests)
 		log.Printf("Health check: http://localhost:%s/health", port)
-		
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
 		}
@@ -115,12 +114,12 @@ func corsMiddleware() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -132,4 +131,3 @@ func worker(id int) {
 	}
 	log.Printf("Worker %d stopped", id)
 }
-

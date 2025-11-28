@@ -130,7 +130,10 @@ ENDSSH
 echo -e "${YELLOW}🧪 Testing deployment...${NC}"
 sleep 2
 if ssh $SERVER_USER@$SERVER_IP "curl -s http://localhost:3001/health" | grep -q "ok"; then
-@@ -79,16 +139,16 @@ else
+    echo -e "${GREEN}✅ Deployment successful!${NC}"
+    echo -e "${GREEN}Service is running at: http://$SERVER_IP:3001${NC}"
+else
+    echo -e "${RED}❌ Deployment may have issues. Check logs.${NC}"
     exit 1
 fi
 
