@@ -80,3 +80,57 @@ type ErrorResponse struct {
 	Stderr     string `json:"stderr,omitempty"`
 	Log        string `json:"log,omitempty"`
 }
+
+// LintRequest represents a request to lint LaTeX files
+type LintRequest struct {
+	Files []FileEntry `json:"files"`
+}
+
+// LintWarning represents a single chktex warning
+type LintWarning struct {
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column"`
+	Severity string `json:"severity"` // "warning" or "error"
+	Code     int    `json:"code"`
+	Message  string `json:"message"`
+}
+
+// LintResponse represents the response from the lint endpoint
+type LintResponse struct {
+	Success    bool          `json:"success"`
+	Warnings   []LintWarning `json:"warnings"`
+	Messages   string        `json:"messages"` // Human-readable summary of all warnings/errors
+	ErrorCount int           `json:"errorCount"`
+	WarnCount  int           `json:"warnCount"`
+	RawOutput  string        `json:"rawOutput,omitempty"`
+}
+
+// WordCountRequest represents a request to count words in LaTeX files
+type WordCountRequest struct {
+	Files []FileEntry `json:"files"`
+}
+
+// WordCountResponse represents the response from the word-count endpoint
+type WordCountResponse struct {
+	Success   bool            `json:"success"`
+	Total     WordCountStats  `json:"total"`
+	ByFile    []FileWordCount `json:"byFile,omitempty"`
+	Summary   string          `json:"summary"` // Human-readable summary
+	RawOutput string          `json:"rawOutput,omitempty"`
+}
+
+// WordCountStats holds word count statistics
+type WordCountStats struct {
+	Words       int `json:"words"`
+	Headers     int `json:"headers"`
+	Captions    int `json:"captions"`
+	MathInline  int `json:"mathInline"`
+	MathDisplay int `json:"mathDisplay"`
+}
+
+// FileWordCount holds word count for a specific file
+type FileWordCount struct {
+	File  string         `json:"file"`
+	Stats WordCountStats `json:"stats"`
+}

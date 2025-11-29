@@ -105,6 +105,8 @@ func setupRouter() *gin.Engine {
 	// Routes
 	router.GET("/health", internal.HealthHandler)
 	router.POST("/compile", internal.CompileHandler)
+	router.POST("/lint", internal.LintHandler)
+	router.POST("/word-count", internal.WordCountHandler)
 
 	return router
 }
