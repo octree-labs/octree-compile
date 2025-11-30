@@ -677,6 +677,7 @@ func (s *compileSession) finalize(cache *CompilationCache) *CompileResult {
 			return &CompileResult{
 				RequestID:    s.compiler.RequestID,
 				Success:      false,
+				PDFData:      pdfData, // Include partial PDF even on error
 				ErrorMessage: errMsg,
 				Stdout:       truncateText(s.stdout.String(), MaxLogChars),
 				Stderr:       truncateText(s.stderr.String(), MaxLogChars),
