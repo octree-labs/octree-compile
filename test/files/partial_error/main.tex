@@ -1,0 +1,75 @@
+\documentclass[tikz, border=10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{
+  shapes.geometric,
+  shapes.symbols,
+  shapes.misc,
+  shapes.multipart,
+  shapes.arrows,
+  shapes.callouts,
+  shapes,
+  positioning,
+  calc,
+  fit
+}
+
+\begin{document}
+
+\begin{tikzpicture}[
+  font=\small,
+  node distance=1.8cm and 2.2cm,
+  process/.style={rectangle, rounded corners, draw=blue!60, thick, fill=blue!5, inner sep=8pt, align=center},
+  datastore/.style={cylinder, cylinder uses custom fill, cylinder body fill=orange!20,
+                     cylinder end fill=orange!10, shape border rotate=90,
+                     draw=orange!80!black, thick, aspect=0.25, inner sep=6pt},
+  decision/.style={diamond, draw=purple!60!black, fill=purple!10, thick, aspect=2, inner sep=2pt, align=center},
+  small/.style={circle, draw=gray!80, fill=gray!20, thick, inner sep=3pt},
+  arrow/.style={->, thick, >=latex},
+  legend/.style={rectangle, rounded corners, draw=black!40, fill=gray!5, inner sep=4pt}
+]
+
+% --- NODES ---
+\node[process, below=of init] (eval) {Evaluate Fitness \\ (task environment)};
+\node[decision, below=of eval] (speciate) {Speciate?};
+\node[process, below left=2cm and -1cm of speciate] (mut) {Mutation \\ (weights, add node, add link)};
+\node[process, below right=2cm and -1cm of speciate] (cross) {Crossover \\ (interspecies rules)};
+\node[datastore, below=3.4cm of speciate] (offspring) {Offspring Pool};
+\node[process, below=of offspring] (replace) {Survivor Selection \\ (elitism + drop weak)};
+\node[process, below=of replace] (next) {Next Generation};
+
+% --- FIT BOXES (GROUPING) ---
+\node[fit=(mut)(cross)(speciate), draw=purple!40, rounded corners, thick, inner sep=12pt,
+      label=above:{\textbf{Evolution Operators}}] {};
+
+\node[fit=(eval)(speciate), draw=blue!20, rounded corners, inner sep=18pt,
+      label=above:{\textbf{Fitness + Speciation}}] {};
+
+% --- ARROWS ---
+\draw[arrow] (init) -- (eval);
+\draw[arrow] (eval) -- (speciate);
+
+\draw[arrow] (speciate) -- node[sloped, above, pos=0.5]{yes} (mut);
+\draw[arrow] (speciate) -- node[sloped, above, pos=0.5]{no} (cross);
+
+\draw[arrow] (mut) |- (offspring);
+\draw[arrow] (cross) |- (offspring);
+
+\draw[arrow] (offspring) -- (replace);
+\draw[arrow] (replace) -- (next);
+
+% --- LOOPBACK ---
+\draw[arrow] (next.east) .. controls +(1.5,0) and +(1.5,0) .. (init.east)
+    node[midway, right]{\textit{repeat until convergence}};
+
+% --- LEGEND ---
+\node[legend, right=3.5cm of replace, anchor=west] (leg) {
+  \begin{tabular}{ll}
+    \tikz \node[process] {}; & Process Block \\
+    \tikz \node[decision] {}; & Decision / Branch \\
+    \tikz \node[datastore] {}; & Offspring Storage \\
+  \end{tabular}
+};
+
+\end{tikzpicture}
+
+\end{document}

@@ -1,0 +1,82 @@
+\documentclass{standalone}
+\usepackage{fontspec}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
+
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm,text centered, draw=black, fill=green!30]
+\tikzstyle{process} = [rectangle, minimum width=3.5cm, minimum height=1cm, text centered, draw=black, fill=blue!20]
+\tikzstyle{decision} = [diamond, aspect=2, minimum width=4cm, minimum height=1cm, text centered, draw=black, fill=orange!30]
+\tikzstyle{arrow} = [-{Stealth[scale=1]}, thick]
+
+\begin{document}
+
+\begin{tikzpicture}[node distance=1.5cm and 3cm, every node/.style={font=\footnotesize}]
+
+% Start node
+\node (start) [startstop] {Start: Production / Casting (Day 0)};
+
+% Branch nodes: AAM and OPC
+\node (AAM) [process, below left=2cm and 3cm of start] {Alkali-activated masonry units (AAM)};
+\node (OPC) [process, below right=2cm and 3cm of start] {OPC masonry units};
+
+% AAM steps
+\node (A1) [process, below=1.5cm of AAM] {Step A1: Thermal curing oven -- 70 °C, 24 h};
+\node (A2) [process, below=1.2cm of A1] {Step A2: Remove wooden mould plates};
+\node (A3) [process, below=1.2cm of A2] {Step A3: Dry chamber -- 23 °C, 65\% RH};
+
+% A3 branch: A-U and A-C
+\node (A4U) [process, below left=1.8cm and 2.5cm of A3, text width=4cm] {Step A4-U: Dry curing -- 27 days (23 °C, 65\% RH)};
+\node (A5U) [process, below=1cm of A4U, text width=4cm] {Step A5-U: Test at 28 days age};
+
+\node (A4C) [process, below right=1.8cm and 2.5cm of A3, text width=4cm] {Step A4-C: Dry curing -- 20 days (23 °C, 65\% RH)};
+\node (A5C) [process, below=1cm of A4C, text width=4.5cm] {Step A5-C: Accelerated carbonation -- 7 days \\ 5\% CO₂, 23 ± 2 °C, 60 ± 5\% RH, CO₂ flow 10 L/min};
+\node (A6C) [process, below=1cm of A5C, text width=4cm] {Step A6-C: Test at 28 days age};
+
+% OPC steps
+\node (O1) [process, below=1.5cm of OPC, text width=5cm] {Step O1: Storage under laboratory conditions -- first 24 h (initial setting)};
+\node (O2) [process, below=1.2cm of O1] {Step O2: Demould};
+\node (O3) [process, below=1.2cm of O2, text width=5cm] {Step O3: Wet chamber -- 23 °C, 100\% RH, 6 days (continuous sprinkling)};
+
+% O3 branch: O-U and O-C
+\node (O4U) [process, below left=1.8cm and 2.5cm of O3, text width=4cm] {Step O4-U: Dry chamber -- 23 °C, 65\% RH, 21 days};
+\node (O5U) [process, below=1cm of O4U, text width=4cm] {Step O5-U: Test at 28 days age};
+
+\node (O4C) [process, below right=1.8cm and 2.5cm of O3, text width=4cm] {Step O4-C: Dry chamber -- 14 days (23 °C, 65\% RH)};
+\node (O5C) [process, below=1cm of O4C, text width=4.5cm] {Step O5-C: Accelerated carbonation -- 7 days \\ Same conditions as AAM \\ 5\% CO₂, 23 ± 2 °C, 60 ± 5\% RH, 10 L/min};
+\node (O6C) [process, below=1cm of O5C, text width=4cm] {Step O6-C: Test at 28 days age};
+
+% Edges
+
+% Start to branches
+\draw[arrow] (start) -- (AAM);
+\draw[arrow] (start) -- (OPC);
+
+% AAM sequence
+\draw[arrow] (AAM) -- (A1);
+\draw[arrow] (A1) -- (A2);
+\draw[arrow] (A2) -- (A3);
+
+% A3 branches
+\draw[arrow] (A3) -- (A4U);
+\draw[arrow] (A4U) -- (A5U);
+
+\draw[arrow] (A3) -- (A4C);
+\draw[arrow] (A4C) -- (A5C);
+\draw[arrow] (A5C) -- (A6C);
+
+% OPC sequence
+\draw[arrow] (OPC) -- (O1);
+\draw[arrow] (O1) -- (O2);
+\draw[arrow] (O2) -- (O3);
+
+% O3 branches
+\draw[arrow] (O3) -- (O4U);
+\draw[arrow] (O4U) -- (O5U);
+
+\draw[arrow] (O3) -- (O4C);
+\draw[arrow] (O4C) -- (O5C);
+\draw[arrow] (O5C) -- (O6C);
+
+\end{tikzpicture}
+
+\end{document}

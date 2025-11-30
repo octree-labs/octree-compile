@@ -575,7 +575,6 @@ func (s *compileSession) runLatexmk(stage string) error {
 
 	engineOpts := []string{
 		"-interaction=nonstopmode",
-		"-halt-on-error",
 		"-file-line-error",
 	}
 	if s.requiresShellEscape {

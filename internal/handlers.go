@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
@@ -91,7 +92,7 @@ func CompileHandler(c *gin.Context) {
 			c.Header("Content-Disposition", "attachment; filename=\"compiled.pdf\"")
 			c.Data(http.StatusOK, "application/pdf", result.PDFData)
 		} else {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
+			errResp := ErrorResponse{
 				Error:      "LaTeX compilation failed",
 				Message:    result.ErrorMessage,
 				RequestID:  result.RequestID,
@@ -100,7 +101,12 @@ func CompileHandler(c *gin.Context) {
 				Stdout:     result.Stdout,
 				Stderr:     result.Stderr,
 				Log:        result.LogTail,
-			})
+			}
+			// Include partial PDF if available (some errors produce partial output)
+			if len(result.PDFData) > 0 {
+				errResp.PdfBuffer = base64.StdEncoding.EncodeToString(result.PDFData)
+			}
+			c.JSON(http.StatusInternalServerError, errResp)
 		}
 	case <-time.After(5 * time.Second):
 		c.JSON(http.StatusServiceUnavailable, ErrorResponse{

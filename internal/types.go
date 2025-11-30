@@ -79,4 +79,5 @@ type ErrorResponse struct {
 	Stdout     string `json:"stdout,omitempty"`
 	Stderr     string `json:"stderr,omitempty"`
 	Log        string `json:"log,omitempty"`
+	PdfBuffer  string `json:"pdfBuffer,omitempty"` // Base64-encoded partial PDF if available
 }
