@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
@@ -86,6 +87,11 @@ func CompileHandler(c *gin.Context) {
 		// Send response based on result
 		if result.Success {
 			c.Header("X-Compile-Sha256", result.SHA256)
+			// Include synctex data as base64 header if available
+			if len(result.SyncTexData) > 0 {
+				c.Header("X-Synctex-Data", base64.StdEncoding.EncodeToString(result.SyncTexData))
+				c.Header("X-Synctex-Size", fmt.Sprintf("%d", len(result.SyncTexData)))
+			}
 			c.Header("Content-Type", "application/pdf")
 			c.Header("Content-Length", fmt.Sprintf("%d", len(result.PDFData)))
 			c.Header("Content-Disposition", "attachment; filename=\"compiled.pdf\"")

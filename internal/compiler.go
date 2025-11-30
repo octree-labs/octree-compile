@@ -577,6 +577,7 @@ func (s *compileSession) runLatexmk(stage string) error {
 		"-interaction=nonstopmode",
 		"-halt-on-error",
 		"-file-line-error",
+		"-synctex=1",
 	}
 	if s.requiresShellEscape {
 		engineOpts = append(engineOpts, "-shell-escape")
@@ -716,15 +717,24 @@ func (s *compileSession) finalize(cache *CompilationCache) *CompileResult {
 
 		log.Printf("[%s] Compilation successful", s.compiler.RequestID)
 
+		// Read synctex file if it exists
+		var synctexData []byte
+		synctexPath := strings.TrimSuffix(s.pdfPath, ".pdf") + ".synctex.gz"
+		if data, err := os.ReadFile(synctexPath); err == nil {
+			synctexData = data
+			log.Printf("[%s] SyncTeX file loaded: %d bytes", s.compiler.RequestID, len(synctexData))
+		}
+
 		return &CompileResult{
-			RequestID:  s.compiler.RequestID,
-			Success:    true,
-			PDFData:    pdfData,
-			SHA256:     sha256Hex,
-			QueueMs:    s.queueMs,
-			DurationMs: durationMs,
-			PDFSize:    len(pdfData),
-			CacheHit:   false,
+			RequestID:   s.compiler.RequestID,
+			Success:     true,
+			PDFData:     pdfData,
+			SyncTexData: synctexData,
+			SHA256:      sha256Hex,
+			QueueMs:     s.queueMs,
+			DurationMs:  durationMs,
+			PDFSize:     len(pdfData),
+			CacheHit:    false,
 		}
 	}
 

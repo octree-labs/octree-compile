@@ -50,6 +50,7 @@ type CompileResult struct {
 	RequestID    string
 	Success      bool
 	PDFData      []byte
+	SyncTexData  []byte // .synctex.gz file contents for source-PDF synchronization
 	SHA256       string
 	ErrorMessage string
 	Stdout       string
@@ -133,4 +134,48 @@ type WordCountStats struct {
 type FileWordCount struct {
 	File  string         `json:"file"`
 	Stats WordCountStats `json:"stats"`
+}
+
+// SyncTexRequest represents a request for SyncTeX synchronization
+type SyncTexRequest struct {
+	// For forward sync (source → PDF): provide file, line, column
+	// For backward sync (PDF → source): provide page, x, y
+	Direction string `json:"direction"` // "forward" or "backward"
+
+	// Forward sync parameters (source to PDF)
+	File   string `json:"file,omitempty"`   // Source file path
+	Line   int    `json:"line,omitempty"`   // 1-based line number
+	Column int    `json:"column,omitempty"` // 1-based column number (0 if unknown)
+
+	// Backward sync parameters (PDF to source)
+	Page int     `json:"page,omitempty"` // 1-based page number
+	X    float64 `json:"x,omitempty"`    // X coordinate from top-left (in points, 72 dpi)
+	Y    float64 `json:"y,omitempty"`    // Y coordinate from top-left (in points, 72 dpi)
+
+	// SyncTeX data (base64 encoded .synctex.gz content)
+	SyncTexData string `json:"synctexData"`
+
+	// PDF filename (for synctex to locate the .synctex.gz)
+	PDFName string `json:"pdfName,omitempty"`
+}
+
+// SyncTexResponse represents the response from SyncTeX synchronization
+type SyncTexResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+
+	// Forward sync result (source → PDF)
+	Page   int     `json:"page,omitempty"`   // 1-based page number
+	X      float64 `json:"x,omitempty"`      // X coordinate
+	Y      float64 `json:"y,omitempty"`      // Y coordinate
+	Width  float64 `json:"width,omitempty"`  // Width of the box
+	Height float64 `json:"height,omitempty"` // Height of the box
+
+	// Backward sync result (PDF → source)
+	File   string `json:"file,omitempty"`   // Source file path
+	Line   int    `json:"line,omitempty"`   // 1-based line number
+	Column int    `json:"column,omitempty"` // Column number (-1 if unknown)
+
+	// Raw output for debugging
+	RawOutput string `json:"rawOutput,omitempty"`
 }

@@ -107,6 +107,7 @@ func setupRouter() *gin.Engine {
 	router.POST("/compile", internal.CompileHandler)
 	router.POST("/lint", internal.LintHandler)
 	router.POST("/word-count", internal.WordCountHandler)
+	router.POST("/synctex", internal.SyncTexHandler)
 
 	return router
 }
