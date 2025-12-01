@@ -108,7 +108,7 @@ func CompileHandler(c *gin.Context) {
 			}
 			c.JSON(http.StatusInternalServerError, errResp)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
 			Error:   "Server busy",
 			Message: "Could not enqueue request, timeout",

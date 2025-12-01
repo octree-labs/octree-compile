@@ -16,8 +16,8 @@ import (
 const (
 	DefaultPort           = "3001"
 	MaxConcurrentRequests = 2
-	CompilationTimeout    = 30 * time.Second
-	ShutdownTimeout       = 30 * time.Second
+	CompilationTimeout    = 60 * time.Second
+	ShutdownTimeout       = 60 * time.Second
 )
 
 var requestQueue chan *internal.CompileJob
@@ -58,9 +58,9 @@ func main() {
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  120 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  240 * time.Second,
 	}
 
 	// Start server in goroutine
